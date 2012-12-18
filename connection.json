@@ -1,0 +1,12 @@
+{
+    "connection_context" : {
+        "name":   "ofs_database10a",
+        "user":   "postgres",
+        "passwd": "postgres",
+        "type":   "postgresql",
+        "host":   "127.0.0.1",
+        "port":   "5432"
+    },
+    "dsn" : "%(type)s://%(user)s:%(passwd)s@%(host)s:%(port)s/%(name)s",
+    "schema" : "sch_dbanalytic",
+}
