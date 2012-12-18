@@ -12,7 +12,7 @@ This is an example sequencer and mapper
 
 import os, json, time, sys
 import files.simpleLogger as logger
-from dbMapLoader import MapperSequencer, _records, _record, _sub_records, _sub_record
+from dbMapLoader import MapperSequencer, _records, _record, _sub_records, _sub_record, Shell
 from dbMapLoader import dbLoader, translators
 from datetime import datetime
 from pprint import pformat
@@ -20,10 +20,9 @@ from pprint import pformat
 
 def convert_date(value):
     _date, _time = value.split('T')
-    args = list(_date.split('-')).extend(_time.split(':'))
+    args = list(_date.split('-'))
+    args.extend(_time.split(':'))
     return datetime(*[int(x) for x in args])
-
-
 translators.set_static(convert_date)
 
 
@@ -33,7 +32,7 @@ class myMapperSequencer(MapperSequencer):
             "usersurname": "'MonAutocuiseur'",
         },
         "recipes": {
-            "userID": "session['users'].userid",
+            "userID": "session.users.userid",
             "recipeSS": "'MonAutocuiseur'",
             "recipeSSRecipeId": "str(record.id)",
             "recipeYield": "record.yield_value",
@@ -49,7 +48,7 @@ class myMapperSequencer(MapperSequencer):
             "recipeSSRecipeId": "str(record.id)",
         },
         "recipes:update": {
-            "userID": "session['users'].userid",
+            "userID": "session.users.userid",
             "recipeSS": "'MonAutocuiseur'",
             "recipeSSRecipeId": "str(record.id)",
             "recipeYield": "record.yield_value",
@@ -276,15 +275,16 @@ def inject_from_master(records_json, database_connection, check_only=False, no_c
             no_check = True
         else:
             injector = dbLoader(dsn, kwargs, log)
-        mapseq = myMapperSequencer(dbengine=injector, log=log, imports=(('datetime', ('datetime',)),))
+        mapseq = myMapperSequencer(log=log, imports=(('datetime', ('datetime',)),))
         if no_check or injector.check_mapping(mapseq.mapper):
             if not check_only:
                 if injector:
-                    injector.prepare_session(myMapperSequencer.mapper)
+                    injector.prepare_session(myMapperSequencer.mapper).prepare_injection()
+                Shell(mapseq, injector)
                 result = mapseq.multi_process_records(records)
                 json_dump(mapseq.flat, flat_seq)
                 if result and not sequencer_only:
-                    result = injector.inject_many(mapseq.flat)
+#                    result = injector.inject_many(mapseq.flat)
                     json_dump(injector.flat, flat_inj)
 
 

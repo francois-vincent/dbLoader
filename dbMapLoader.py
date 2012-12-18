@@ -136,6 +136,7 @@ class MapperSequencer(object):
         except:
             self.log = log
         self.dbengine = None
+        self.session = None
         self.flat = []
         self.records_processed = 0
         self.level = -1
@@ -177,43 +178,20 @@ class MapperSequencer(object):
             exec('global {0}; {0} = _record'.format(_record_name.lower()))
         except:
             pass
+        session = self.session
         mapping = dict()
         for _c, _expr in self.mapper[_table].iteritems():
             _expr = _expr.encode('utf8')
-            if _expr.startswith('session'):
-                mapping[_c.lower()] = _expr
-            else:
-                try:
-                    mapping[_c.lower()] = eval(_expr)
-                except Exception, e:
-                    raise RuntimeError("skip <%s>, eval error {%s: <%s>}: %s" % (_table, _c, _expr, e))
+            try:
+                mapping[_c.lower()] = eval(_expr)
+            except Exception, e:
+                raise RuntimeError("skip <%s>, eval error {%s: <%s>}: %s" % (_table, _c, _expr, e))
         return mapping
     def _eval_expr(self, _expr):
         try:
             return eval(_expr)
         except:
             return _expr
-    def select(self, _table, _multiple=False):
-        if self.dbengine:
-            try:
-                _filter = self._eval_mapping(_table)
-            except Exception, e:
-                self.log.error("  FAILED select <%s>: %s" % (_table, e))
-                self.flat.append("comment select failed <%s>" % _table)
-                raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[_table]
-            _query = self.orm_session.query(_obj).filter_by(**_filter)
-            _count = _query.count()
-            if _count and (_multiple or _count==1):
-                _obj = ("select "+_table, _filter)
-                self._filter = _filter
-                self.flat.append(_obj)
-                return True
-            elif _count:
-                self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_table, _count, _filter))
-                self.flat.append("comment select failed <%s>" % _table)
-                raise SequencerInterruption()
-        return False
     def create(self, _table):
         try:
             _filter = self._eval_mapping(_table)
@@ -224,7 +202,32 @@ class MapperSequencer(object):
         _obj = ("create "+_table, _filter)
         self.flat.append(_obj)
         if self.dbengine:
-            pass
+            self.dbengine.create(_table, _filter)
+    def exists(self, _table):
+        return self.select(_table, _check_only=True)
+    def select(self, _table, _check_only=False):
+        if self.dbengine:
+            try:
+                _filter = self._eval_mapping(_table)
+            except Exception, e:
+                self.log.error("  FAILED select <%s>: %s" % (_table, e))
+                self.flat.append("comment select failed <%s>" % _table)
+                raise SequencerInterruption()
+            _obj = self.dbengine.mapper_objects[_table]
+            _query = self.orm_session.query(_obj).filter_by(**_filter)
+            _count = _query.count()
+            if _count and (_check_only or _count==1):
+                _obj = ("select "+_table, _filter)
+                self._filter = _filter
+                self.flat.append(_obj)
+                if not _check_only:
+                    self.dbengine.select(_table, _query.one())
+                return True
+            elif _count:
+                self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_table, _count, _filter))
+                self.flat.append("comment select failed <%s>" % _table)
+                raise SequencerInterruption()
+        return False
     def update(self, _table, _update_table):
         if self.dbengine:
             try:
@@ -246,6 +249,7 @@ class MapperSequencer(object):
                 _obj = ("update "+_table, _filter2, _filter)
                 self._filter = _filter
                 self.flat.append(_obj)
+                self.dbengine.update(_table, _filter2, _query.one())
                 return True
             elif _count:
                 self.log.error("  FAILED update <%s>, %d records found, query: %s" % (_table, _count, _filter))
@@ -349,8 +353,12 @@ class MapperSequencer(object):
         return _return
     def commit(self):
         self.flat.append("commit")
+        if self.dbengine:
+            self.dbengine.commit()
     def flush(self):
         self.flat.append("flush")
+        if self.dbengine:
+            self.dbengine.flush()
     def comment(self, message):
         self.flat.append("comment "+message)
     def abort(self):
@@ -364,9 +372,8 @@ class Shell(object):
         self.sequencer = sequencer
         self.injector = injector
         if injector:
-            self.sequencer.dbengine = self.injector.engine
+            self.sequencer.dbengine = self.injector
             self.sequencer.session = self.injector.session
-
 
 class dbLoader(object):
     def __init__(self, connection_dsn, kwargs, log=0):
@@ -445,12 +452,15 @@ class dbLoader(object):
         self.flat = []
         self.to_flush = []
         return self
-    def prepare_injection(self, records):
-        rec_num = len([x for x in records])
-        rec_num_get = len([x for x in records if isinstance(x, tuple) and x[0].startswith('select')])
-        rec_num_set = len([x for x in records if isinstance(x, tuple) and x[0].startswith('create')])
-        rec_num_update = len([x for x in records if isinstance(x, tuple) and x[0].startswith('update')])
-        self.log.info("INJECT START %d record(s), %d select, %d create, %d update" % (rec_num, rec_num_get, rec_num_set, rec_num_update))
+    def prepare_injection(self, records=None):
+        if records:
+            rec_num = len(records)
+            rec_num_get = len([x for x in records if isinstance(x, tuple) and x[0].startswith('select')])
+            rec_num_set = len([x for x in records if isinstance(x, tuple) and x[0].startswith('create')])
+            rec_num_update = len([x for x in records if isinstance(x, tuple) and x[0].startswith('update')])
+            self.log.info("INJECT START %d record(s), %d select, %d create, %d update" % (rec_num, rec_num_get, rec_num_set, rec_num_update))
+        else:
+            self.log.info("INJECT START on the fly")
         self.create_count, self.update_count = 0, 0
     def inject_many(self, records):
         self.prepare_injection(records)
@@ -474,8 +484,6 @@ class dbLoader(object):
         try:
             _obj = self.mapper_objects[_table]()
             for _key, _value in _record.iteritems():
-#                if isinstance(_value, basestring) and _value.startswith('session'):
-#                    _value = eval(_value)
                 _obj.__setattr__(_key, _value)
             session[_table] = _obj
             self.to_flush.append(('create ', _table, _obj))
@@ -486,47 +494,56 @@ class dbLoader(object):
             return False
     def select(self, _table, _record):
         session = self.session
-        self.log.info("INJECT select record <%s>" %  _table)
-        _mapper_object = self.mapper_objects[_table]
-        _filter = _record
-        _query = self.orm_session.query(_mapper_object).filter_by(**_filter)
-        try:
-            _object = session[_table] = _query.one()
-        except:
-            self.orm_session.rollback()
-            self.log.error('INJECT ABORTED select <%s> multiple instances query %s'%(_table, _filter))
-            return False
+        if isinstance(_record, dict):
+            self.log.info("INJECT select record <%s>" %  _table)
+            _mapper_object = self.mapper_objects[_table]
+            _filter = _record
+            _query = self.orm_session.query(_mapper_object).filter_by(**_filter)
+            try:
+                _object = session[_table] = _query.one()
+            except:
+                self.orm_session.rollback()
+                self.log.error('INJECT ABORTED select <%s> multiple instances query %s'%(_table, _filter))
+                return False
+        else:
+            _object = session[_table] = _record
         _cols = dict((_col, getattr(_object, _col)) for _col in self.get_columnames(_table.split(':')[0]))
         self.flat.append(('get '+_table, _cols))
     def update(self, _table, _record, _record2):
         session = self.session
         self.update_count += 1
-        self.log.info("INJECT update step %d record <%s>" % (self.update_count, _table))
-        _mapper_object = self.mapper_objects[_table]
-        _filter = _record2
-        _query = self.orm_session.query(_mapper_object).filter_by(**_filter)
-        try:
-            _object = session[_table] = _query.one()
-        except:
-            self.orm_session.rollback()
-            self.log.error('INJECT ABORTED update <%s> multiple instances query %s'%(_table, _filter))
-            return False
+        if isinstance(_record2, dict):
+            self.log.info("INJECT update step %d record <%s>" % (self.update_count, _table))
+            _mapper_object = self.mapper_objects[_table]
+            _filter = _record2
+            _query = self.orm_session.query(_mapper_object).filter_by(**_filter)
+            try:
+                _object = session[_table] = _query.one()
+            except:
+                self.orm_session.rollback()
+                self.log.error('INJECT ABORTED update <%s> multiple instances query %s'%(_table, _filter))
+                return False
+        else:
+            _object = session[_table] = _record2
         try:
             _updated = False
-            for _key, _value in _record[1].iteritems():
-                if isinstance(_value, basestring) and _value.startswith('session'):
-                    _value = eval(_value)
+            for _key, _value in _record.iteritems():
                 if getattr(_object, _key) != _value:
                     _object.__setattr__(_key, _value)
                     _updated = True
-            session[_table] = _object
             if not _updated:
                 _object = None
             self.to_flush.append(('update ', _table, _object))
+            return True
         except Exception, e:
             self.orm_session.rollback()
             self.log.error('INJECT ABORTED create <%s> exception: %s'%(_record[0], e))
             return False
+    def commit(self):
+        self.orm_session.commit()
+        self._flush_flat()
+    def flush(self):
+        self.orm_session.flush()
     def inject_one(self, _record):
         if isinstance(_record, tuple):
             _split_command = _record[0].split()
@@ -540,10 +557,9 @@ class dbLoader(object):
         else:
             _split_command = _record.split()
             if _split_command[0]=="flush":
-                self.orm_session.flush()
+                self.flush()
             elif _split_command[0]=="commit":
-                self.orm_session.commit()
-                self._flush_flat()
+                self.commit()
             elif len(_split_command)==2 and _split_command[0]=="run":
                 try:
                     message = []
