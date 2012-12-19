@@ -181,7 +181,7 @@ class MapperSequencer(object):
     def _eval_mapping(self, _table):
         "returns an evaluated record from the mapper"
         try:
-            _record_name, _record  = self._get_caller_parameter()
+            _record_name, _record = self._get_caller_parameter()
             exec('global {0}; {0} = _record'.format(_record_name.lower()))
         except:
             pass
@@ -260,10 +260,6 @@ class MapperSequencer(object):
                     self.flat.append("comment update failed <%s>" % _update)
                     raise SequencerInterruption()
                 self.flat.append(("update "+_check, check_filter))
-#                print "-"*80
-#                print _check
-#                print _check_update_filter
-#                print _update_filter
                 self.dbengine.update(_mapping_table, _check_update_filter, _update_filter, _query.one())
                 return True
             elif _count:
@@ -387,10 +383,10 @@ class dbLoader(object):
         self.create_count, self.update_count = 0, 0
     def _flush_flat(self):
         for _command, _table, _obj in self.to_flush:
-            if _obj:
-                _cols = dict((_col, getattr(_obj, _col)) for _col in self.get_columnames(_table.split(':')[0]))
+            if isinstance(_obj, dict):
+                _cols = _obj
             else:
-                _cols = None
+                _cols = dict((_col, getattr(_obj, _col)) for _col in self.get_columnames(_table.split(':')[0]))
             self.flat.append((_command+_table, _cols))
         self.to_flush = []
     def create(self, _table, _record):
@@ -417,18 +413,16 @@ class dbLoader(object):
             _must_update = False
             for _key, _value in _check_update.iteritems():
                 if getattr(_object, _key) != _value:
-                    print '-'*80
-                    print _table
-                    print _key
-                    print '<%s>'%getattr(_object, _key)
-                    print '<%s>'%_value
+#                    print '-'*80
+#                    print _table
+#                    print _key
+#                    print '<%s>'%getattr(_object, _key)
+#                    print '<%s>'%_value
                     _must_update = True
             if _must_update:
                 for _key, _value in _update.iteritems():
                     _object.__setattr__(_key, _value)
-            else:
-                _object = None
-            self.to_flush.append(('update ', _table, _object))
+                self.to_flush.append(('update ', _table, _update))
             return True
         except Exception, e:
             self.orm_session.rollback()
