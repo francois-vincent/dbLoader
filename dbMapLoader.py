@@ -290,6 +290,7 @@ class Shell(object):
         if injector:
             sequencer.dbengine = injector
             sequencer.session = injector.session
+            injector.sequencer = sequencer
 
 class InjectorInterruption(Exception):
     pass
@@ -412,10 +413,13 @@ class dbLoader(object):
         try:
             _must_update = False
             for _key, _value in _check_update.iteritems():
+                if type(_value) is str:
+                    _value = _value.decode('utf8')
                 if getattr(_object, _key) != _value:
 #                    print '-'*80
-#                    print _table
+#                    print _table, self.sequencer.records_processed
 #                    print _key
+#                    print type(getattr(_object, _key)), type(_value)
 #                    print '<%s>'%getattr(_object, _key)
 #                    print '<%s>'%_value
                     _must_update = True
