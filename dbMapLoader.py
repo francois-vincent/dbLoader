@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 __date__ = 'dec 18th, 2012'
 __author__ = 'François Vincent'
 __mail__ = 'fvincent@groupeseb.com'
@@ -44,6 +44,13 @@ def _records(func):
             func(self, records)
             r = True
         except SequencerInterruption:
+            if self.dbengine:
+                self.dbengine.orm_session.rollback()
+            self.log.error("SEQUENCER ABORTED")
+            r = False
+        except InjectorInterruption:
+            self.dbengine.orm_session.rollback()
+            self.log.error("INJECTOR ABORTED")
             r = False
         self._end_records()
         return r
@@ -161,7 +168,7 @@ class MapperSequencer(object):
             self.orm_session = self.dbengine.orm_session
         self.log.info("SEQUENCER START %d record(s)"%len(records))
     def _end_records(self):
-        self.log.info("SEQUENCER END %s record(s) will be imported (out of %s)"%(self.records_processed, len(self.records)))
+        self.log.info("SEQUENCER END %s record(s) have been imported (out of %s)"%(self.records_processed, len(self.records)))
     def _start_record(self):
         self.log.info("RECORD START %s out of %s"%(self.records_processed+1, len(self.records)))
     def _end_record(self):
@@ -187,170 +194,83 @@ class MapperSequencer(object):
             except Exception, e:
                 raise RuntimeError("skip <%s>, eval error {%s: <%s>}: %s" % (_table, _c, _expr, e))
         return mapping
-    def _eval_expr(self, _expr):
-        try:
-            return eval(_expr)
-        except:
-            return _expr
     def create(self, _table):
+        _mapping_table = _table.split(':')[0]
         try:
             _filter = self._eval_mapping(_table)
         except Exception, e:
             self.log.error("  FAILED create table <%s>: %s" % (_table, e))
             self.flat.append("comment create failed <%s>" % _table)
             raise SequencerInterruption()
-        _obj = ("create "+_table, _filter)
-        self.flat.append(_obj)
+        self.flat.append(("create "+_table, _filter))
         if self.dbengine:
-            self.dbengine.create(_table, _filter)
+            self.dbengine.create(_mapping_table, _filter)
     def exists(self, _table):
         return self.select(_table, _check_only=True)
     def select(self, _table, _check_only=False):
         if self.dbengine:
+            _mapping_table = _table.split(':')[0]
             try:
                 _filter = self._eval_mapping(_table)
             except Exception, e:
                 self.log.error("  FAILED select <%s>: %s" % (_table, e))
                 self.flat.append("comment select failed <%s>" % _table)
                 raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[_table]
+            _obj = self.dbengine.mapper_objects[_mapping_table]
             _query = self.orm_session.query(_obj).filter_by(**_filter)
             _count = _query.count()
             if _count and (_check_only or _count==1):
-                _obj = ("select "+_table, _filter)
-                self._filter = _filter
-                self.flat.append(_obj)
+                self.flat.append(("select "+_table, _filter))
                 if not _check_only:
-                    self.dbengine.select(_table, _query.one())
+                    self.dbengine.select(_mapping_table, _query.one())
                 return True
             elif _count:
                 self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_table, _count, _filter))
                 self.flat.append("comment select failed <%s>" % _table)
                 raise SequencerInterruption()
         return False
-    def update(self, _table, _update_table):
+    def update(self, _check, _check_update, _update):
         if self.dbengine:
-            try:
-                _filter = self._eval_mapping(_table)
-            except Exception, e:
-                self.log.error("  FAILED update <%s>: %s" % (_table, e))
-                self.flat.append("comment update failed <%s>" % _table)
+            _mapping_table = _check.split(':')[0]
+            if _check_update.split(':')[0] != _mapping_table or \
+               _update.split(':')[0] != _mapping_table:
+                self.log.error("  FAILED update <%s>: tables must have same prefixes" % (_check, ))
+                self.flat.append("comment update failed <%s>" % _check)
                 raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[_table]
-            _query = self.orm_session.query(_obj).filter_by(**_filter)
+            try:
+                check_filter = self._eval_mapping(_check)
+            except Exception, e:
+                self.log.error("  FAILED update <%s>: %s" % (_check, e))
+                self.flat.append("comment update failed <%s>" % _check)
+                raise SequencerInterruption()
+            _obj = self.dbengine.mapper_objects[_check]
+            _query = self.orm_session.query(_obj).filter_by(**check_filter)
             _count = _query.count()
             if _count == 1:
                 try:
-                    _filter2 = self._eval_mapping(_update_table)
+                    _check_update_filter = self._eval_mapping(_check_update)
                 except Exception, e:
-                    self.log.error("  FAILED update <%s>: %s" % (_update_table, e))
-                    self.flat.append("comment update failed <%s>" % _update_table)
+                    self.log.error("  FAILED update <%s>: %s" % (_check_update, e))
+                    self.flat.append("comment update failed <%s>" % _check_update)
                     raise SequencerInterruption()
-                _obj = ("update "+_table, _filter2, _filter)
-                self._filter = _filter
-                self.flat.append(_obj)
-                self.dbengine.update(_table, _filter2, _query.one())
+                try:
+                    _update_filter = self._eval_mapping(_update)
+                except Exception, e:
+                    self.log.error("  FAILED update <%s>: %s" % (_update, e))
+                    self.flat.append("comment update failed <%s>" % _update)
+                    raise SequencerInterruption()
+                self.flat.append(("update "+_check, check_filter))
+#                print "-"*80
+#                print _check
+#                print _check_update_filter
+#                print _update_filter
+                self.dbengine.update(_mapping_table, _check_update_filter, _update_filter, _query.one())
                 return True
             elif _count:
-                self.log.error("  FAILED update <%s>, %d records found, query: %s" % (_table, _count, _filter))
-                self.flat.append("comment update failed <%s>" % _table)
+                self.log.error("  FAILED update <%s>, %d records found, query: %s" % (_check, _count, check_filter))
+                self.flat.append("comment update failed <%s>" % _check)
                 raise SequencerInterruption()
         return False
-    def create_or_select(self, check_table, create_table):
-        _return = True
-        if self.dbengine:
-            try:
-                _filter = self._eval_mapping(check_table)
-            except Exception, e:
-                self.log.error("  FAILED create_or_select check_table: %s"%e)
-                raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[check_table]
-            _query = self.orm_session.query(_obj).filter_by(**_filter)
-            _count = _query.count()
-            if _count == 1:
-                _obj = ("select "+create_table, _filter)
-                self._filter = _filter
-                _table = check_table
-                _return = False
-            elif not _count:
-                _obj = ("create "+create_table, {})
-                _table = create_table
-            else:
-                self.log.error("  FAILED create_or_select <%s>, multiple records found, query: %s" % (check_table, _filter))
-                raise SequencerInterruption()
-        else:
-            _obj = ("create "+create_table, {})
-            _table = create_table
-        if _table is create_table:
-            try:
-                _filter = self._eval_mapping(_table)
-            except Exception, e:
-                self.log.error("  FAILED create_or_select create_table: %s"%e)
-                raise SequencerInterruption()
-            _obj[1].update(_filter)
-        self.flat.append(_obj)
-        return _return
-    def create_or_skip(self, check_table, create_table):
-        if self.dbengine:
-            try:
-                _filter = self._eval_mapping(check_table)
-            except Exception, e:
-                self.log.error("  FAILED create_or_skip check_table: %s"%e)
-                raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[check_table]
-            _query = self.orm_session.query(_obj).filter_by(**_filter)
-            if _query.count():
-                self.log.info('  TABLE SKIPPED <%s>'%create_table)
-                return False
-            else:
-                _obj = ("create "+create_table, {})
-                _table = create_table
-        else:
-            _obj = ("create "+create_table, {})
-            _table = create_table
-        if _table is create_table:
-            try:
-                _filter = self._eval_mapping(_table)
-            except Exception, e:
-                self.log.error("  FAILED create_or_skip create_table: %s"%e)
-                raise SequencerInterruption()
-        _obj[1].update(_filter)
-        self.flat.append(_obj)
-        return True
-    def create_or_update(self, check_table, create_table, update_table):
-        _return = True
-        if self.dbengine:
-            try:
-                _filter = self._eval_mapping(check_table)
-            except Exception, e:
-                self.log.error("  FAILED create_or_update check_table: %s"%e)
-                raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[check_table]
-            _query = self.orm_session.query(_obj).filter_by(**_filter)
-            _count = _query.count()
-            if _count == 1:
-                # Warn: this is the only case where record is a triple
-                _obj = ("update "+create_table, {}, _filter)
-                self._filter = _filter
-                _table = update_table
-                _return = False
-            elif not _count:
-                _obj = ("create "+create_table, {})
-                _table = create_table
-            else:
-                self.log.error("  FAILED create_or_update <%s>, multiple records found, query: %s" % (check_table, _filter))
-                raise SequencerInterruption()
-        else:
-            _obj = ("create "+create_table, {})
-            _table = create_table
-        try:
-            _filter = self._eval_mapping(_table)
-        except Exception, e:
-            self.log.error("  FAILED create_or_update create_table: %s"%e)
-            raise SequencerInterruption()
-        _obj[1].update(_filter)
-        self.flat.append(_obj)
-        return _return
     def commit(self):
         self.flat.append("commit")
         if self.dbengine:
@@ -372,8 +292,11 @@ class Shell(object):
         self.sequencer = sequencer
         self.injector = injector
         if injector:
-            self.sequencer.dbengine = self.injector
-            self.sequencer.session = self.injector.session
+            sequencer.dbengine = injector
+            sequencer.session = injector.session
+
+class InjectorInterruption(Exception):
+    pass
 
 class dbLoader(object):
     def __init__(self, connection_dsn, kwargs, log=0):
@@ -462,119 +385,57 @@ class dbLoader(object):
         else:
             self.log.info("INJECT START on the fly")
         self.create_count, self.update_count = 0, 0
-    def inject_many(self, records):
-        self.prepare_injection(records)
-        for record in records:
-            if not self.inject_one(record):
-                self.log.error("INJECT ABORTED @ record %d" % self.create_count)
-                return False
-        self.log.info("INJECT END OK")
-        return True
     def _flush_flat(self):
         for _command, _table, _obj in self.to_flush:
-            _cols = {}
-            for _col in self.get_columnames(_table.split(':')[0]):
-                _cols[_col] = getattr(_obj, _col)
+            if _obj:
+                _cols = dict((_col, getattr(_obj, _col)) for _col in self.get_columnames(_table.split(':')[0]))
+            else:
+                _cols = None
             self.flat.append((_command+_table, _cols))
         self.to_flush = []
     def create(self, _table, _record):
-        session = self.session
         self.create_count += 1
         self.log.info("INJECT create step %d record <%s>" % (self.create_count, _table))
         try:
             _obj = self.mapper_objects[_table]()
             for _key, _value in _record.iteritems():
                 _obj.__setattr__(_key, _value)
-            session[_table] = _obj
+            self.session[_table] = _obj
             self.to_flush.append(('create ', _table, _obj))
             self.orm_session.add(_obj)
         except Exception, e:
             self.orm_session.rollback()
-            self.log.error('INJECT ABORTED create <%s>: %s'%(_table, e))
-            return False
-    def select(self, _table, _record):
-        session = self.session
-        if isinstance(_record, dict):
-            self.log.info("INJECT select record <%s>" %  _table)
-            _mapper_object = self.mapper_objects[_table]
-            _filter = _record
-            _query = self.orm_session.query(_mapper_object).filter_by(**_filter)
-            try:
-                _object = session[_table] = _query.one()
-            except:
-                self.orm_session.rollback()
-                self.log.error('INJECT ABORTED select <%s> multiple instances query %s'%(_table, _filter))
-                return False
-        else:
-            _object = session[_table] = _record
-        _cols = dict((_col, getattr(_object, _col)) for _col in self.get_columnames(_table.split(':')[0]))
-        self.flat.append(('get '+_table, _cols))
-    def update(self, _table, _record, _record2):
-        session = self.session
+            self.log.error('INJECT ABORTED create <%s>: %s' % (_table, e))
+            raise InjectorInterruption()
+    def select(self, _table, _object):
+        self.session[_table] = _object
+        self.to_flush.append(('get ', _table, _object))
+    def update(self, _table, _check_update, _update, _object):
         self.update_count += 1
-        if isinstance(_record2, dict):
-            self.log.info("INJECT update step %d record <%s>" % (self.update_count, _table))
-            _mapper_object = self.mapper_objects[_table]
-            _filter = _record2
-            _query = self.orm_session.query(_mapper_object).filter_by(**_filter)
-            try:
-                _object = session[_table] = _query.one()
-            except:
-                self.orm_session.rollback()
-                self.log.error('INJECT ABORTED update <%s> multiple instances query %s'%(_table, _filter))
-                return False
-        else:
-            _object = session[_table] = _record2
+        self.session[_table] = _object
         try:
-            _updated = False
-            for _key, _value in _record.iteritems():
+            _must_update = False
+            for _key, _value in _check_update.iteritems():
                 if getattr(_object, _key) != _value:
+                    print '-'*80
+                    print _table
+                    print _key
+                    print '<%s>'%getattr(_object, _key)
+                    print '<%s>'%_value
+                    _must_update = True
+            if _must_update:
+                for _key, _value in _update.iteritems():
                     _object.__setattr__(_key, _value)
-                    _updated = True
-            if not _updated:
+            else:
                 _object = None
             self.to_flush.append(('update ', _table, _object))
             return True
         except Exception, e:
             self.orm_session.rollback()
-            self.log.error('INJECT ABORTED create <%s> exception: %s'%(_record[0], e))
-            return False
+            self.log.error('INJECT ABORTED update <%s> exception: %s' % (_table, e))
+            raise InjectorInterruption()
     def commit(self):
         self.orm_session.commit()
         self._flush_flat()
     def flush(self):
         self.orm_session.flush()
-    def inject_one(self, _record):
-        if isinstance(_record, tuple):
-            _split_command = _record[0].split()
-            _table = _split_command[1]
-            if _split_command[0] == "create":
-                return self.create(_table, _record[1])
-            elif _split_command[0] == "select":
-                return self.select(_table, _record[1])
-            elif _split_command[0] == "update":
-                return self.update(_table, _record[1], _record[2])
-        else:
-            _split_command = _record.split()
-            if _split_command[0]=="flush":
-                self.flush()
-            elif _split_command[0]=="commit":
-                self.commit()
-            elif len(_split_command)==2 and _split_command[0]=="run":
-                try:
-                    message = []
-                    result = getattr(translators, _split_command[1])(self, message)
-                    if result > 1:
-                        self.orm_session.rollback()
-                        self.log.error('INJECT ABORTED processor <%s>: %s'%(_split_command[1], message[0]))
-                        return False
-                except Exception, e:
-                    self.orm_session.rollback()
-                    self.log.error('INJECT ABORTED processor <%s> exception: %s'%(_split_command[1], e))
-                    return False
-            elif _split_command[0]=="comment":
-                pass # There is really nothing to do here !!
-            else:
-                self.log.error('INJECT ABORTED unknown command <%s>'%_record)
-                return False
-        return True

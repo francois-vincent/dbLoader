@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 __date__ = 'dec 18th, 2012'
 __author__ = 'François Vincent'
 __mail__ = 'fvincent@groupeseb.com'
@@ -25,7 +25,6 @@ def convert_date(value):
     return datetime(*[int(x) for x in args])
 translators.set_static(convert_date)
 
-
 class myMapperSequencer(MapperSequencer):
     mapper = {
         "users": {
@@ -44,13 +43,18 @@ class myMapperSequencer(MapperSequencer):
             "recipeTechDate": "datetime.now()",
         },
         "recipes:check": {
-            "recipeSS": "'MonAutocuiseur'",
-            "recipeSSRecipeId": "str(record.id)",
-        },
-        "recipes:update": {
             "userID": "session.users.userid",
             "recipeSS": "'MonAutocuiseur'",
             "recipeSSRecipeId": "str(record.id)",
+        },
+        "recipes:check_update": {
+            "recipeYield": "record.yield_value",
+            "recipePrepareTime": "translators.convert_duration(record.preparation_time)",
+            "recipeCookTime": "translators.convert_duration(record.cooking_time)",
+            "recipeTotalTime": "translators.convert_duration(record.total_time)",
+            "recipeSSModifDate": "translators.convert_date(record.modified)",
+        },
+        "recipes:update": {
             "recipeYield": "record.yield_value",
             "recipePrepareTime": "translators.convert_duration(record.preparation_time)",
             "recipeCookTime": "translators.convert_duration(record.cooking_time)",
@@ -71,6 +75,12 @@ class myMapperSequencer(MapperSequencer):
             "recipeid": "session.recipes.recipeid",
             "recipelgidlang": "'fr'",
         },
+        "recipeslg:check_update": {
+            "recipeLGName": "record.recipe",
+            "recipelgsummary": "record.summary",
+            "recipelgingredientssummary": "' - '.join(record.ingredients_summary)",
+            "recipelgInstructions": "' - '.join(self.instructions)",
+        },
         "recipeslg:update": {
             "recipeLGName": "record.recipe",
             "recipelgsummary": "record.summary",
@@ -88,6 +98,9 @@ class myMapperSequencer(MapperSequencer):
             "cookingstepss": "'MonAutocuiseur'",
             "cookingstepsscookingstepid": "str(step.id)",
         },
+        "cookingsteps:check_update": {
+            "cookingstepnum": "step.order",
+        },
         "cookingsteps:update": {
             "cookingstepnum": "step.order",
             "cookingStepTechDate": "datetime.now()",
@@ -101,6 +114,9 @@ class myMapperSequencer(MapperSequencer):
         "cookingstepslg:check": {
             "cookingstepid": "session.cookingsteps.cookingstepid",
             "cookingsteplgidlang": "'fr'",
+        },
+        "cookingstepslg:check_update": {
+            "cookingsteplgname": "step.desc",
         },
         "cookingstepslg:update": {
             "cookingsteplgname": "step.desc",
@@ -123,12 +139,12 @@ class myMapperSequencer(MapperSequencer):
 
     @_record
     def process_record(self, record):
-        if not self.update("recipes:check", "recipes:update"):
+        if not self.update("recipes:check", "recipes:check_update", "recipes:update"):
             self.create("recipes")
             self.log.info("Create recipe name: " + record.recipe)
             self.flush()
         self.multi_process_steps(record.steps)
-        if not self.update("recipeslg:check", "recipeslg:update"):
+        if not self.update("recipeslg:check", "recipeslg:check_update", "recipeslg:update"):
             self.create("recipeslg")
         self.commit()
 
@@ -140,13 +156,13 @@ class myMapperSequencer(MapperSequencer):
 
     @_sub_record
     def process_step(self, step):
-        if not self.update("cookingsteps:check", "cookingsteps:update"):
+        if not self.update("cookingsteps:check", "cookingsteps:check_update", "cookingsteps:update"):
             self.create("cookingsteps")
             self.flush()
         self.instructions.append(step.desc)
-        if not self.update("cookingstepslg:check", "cookingstepslg:update"):
+        if not self.update("cookingstepslg:check", "cookingstepslg:check_update", "cookingstepslg:update"):
             self.create("cookingstepslg")
-        if not self.select("recipecontainscookingsteps"):
+        if not self.exists("recipecontainscookingsteps"):
             self.create("recipecontainscookingsteps")
 
 #      Utility functions
@@ -166,7 +182,6 @@ def json_load(filename, mode='eval'):
         if mode == 'eval':
             return eval(f.read())
 
-
 def json_dump(data, filename, mode='eval'):
     """
     using 'eval' mode allows any python datatype
@@ -177,11 +192,9 @@ def json_dump(data, filename, mode='eval'):
         if mode == 'eval':
             f.write(pformat(data))
 
-
 def check_prefixes(prefixes):
     for p in set(prefixes):
         check_prefix(p)
-
 
 def check_prefix(prefix):
     "check folder write access and eventually set path"
@@ -192,7 +205,6 @@ def check_prefix(prefix):
             raise RuntimeError("Can't set folder <%s>" % prefix)
     if not os.access(prefix, os.W_OK):
         raise RuntimeError("Folder <%s> is not writable" % prefix)
-
 
 def check_file_access(master, name, required=True, ext='', create=False):
     """
@@ -283,8 +295,7 @@ def inject_from_master(records_json, database_connection, check_only=False, no_c
                 Shell(mapseq, injector)
                 result = mapseq.multi_process_records(records)
                 json_dump(mapseq.flat, flat_seq)
-                if result and not sequencer_only:
-#                    result = injector.inject_many(mapseq.flat)
+                if not sequencer_only:
                     json_dump(injector.flat, flat_inj)
 
 
