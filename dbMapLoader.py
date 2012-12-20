@@ -188,9 +188,14 @@ class MapperSequencer(object):
         session = self.session
         mapping = dict()
         for _c, _expr in self.mapper[_table].iteritems():
-            _expr = _expr.encode('utf8')
+#            _expr = _expr.encode('utf8')
+            if _expr.startswith('session'):
+                _expr = _expr.lower()
             try:
-                mapping[_c.lower()] = eval(_expr)
+                if _expr.startswith('session') and not self.dbengine:
+                    mapping[_c.lower()] = _expr
+                else:
+                    mapping[_c.lower()] = eval(_expr)
             except Exception, e:
                 raise RuntimeError("skip <%s>, eval error {%s: <%s>}: %s" % (_table, _c, _expr, e))
         return mapping
