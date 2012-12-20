@@ -194,42 +194,59 @@ class MapperSequencer(object):
             except Exception, e:
                 raise RuntimeError("skip <%s>, eval error {%s: <%s>}: %s" % (_table, _c, _expr, e))
         return mapping
-    def create(self, _table):
-        _mapping_table = _table.split(':')[0]
+    def create(self, _create):
+        """
+        _create: a mapping record to inject into the database
+        """
+        # eval the mapping
         try:
-            _filter = self._eval_mapping(_table)
+            _filter = self._eval_mapping(_create)
         except Exception, e:
-            self.log.error("  FAILED create table <%s>: %s" % (_table, e))
-            self.flat.append("comment create failed <%s>" % _table)
+            self.log.error("  FAILED create table <%s>: %s" % (_create, e))
+            self.flat.append("comment create failed <%s>" % _create)
             raise SequencerInterruption()
-        self.flat.append(("create "+_table, _filter))
+        # save the evaluated record in the flat structure
+        self.flat.append(("create "+_create, _filter))
+        # if an engine is declared, inject the record into the database
         if self.dbengine:
-            self.dbengine.create(_mapping_table, _filter)
-    def exists(self, _table):
-        return self.select(_table, _check_only=True)
-    def select(self, _table, _check_only=False):
+            _prefix = _create.split(':')[0]
+            self.dbengine.create(_prefix, _filter)
+    def exists(self, _check):
+        return self.select(_check, _check_only=True)
+    def select(self, _check, _check_only=False):
+        """
+        _check: a mapping record to check exitence of database record
+        _check_only: if set, this method will allow multiple matching records and will not update session
+        returns: True if record found
+        """
         if self.dbengine:
-            _mapping_table = _table.split(':')[0]
+            _prefix = _check.split(':')[0]
             try:
-                _filter = self._eval_mapping(_table)
+                _filter = self._eval_mapping(_check)
             except Exception, e:
-                self.log.error("  FAILED select <%s>: %s" % (_table, e))
-                self.flat.append("comment select failed <%s>" % _table)
+                self.log.error("  FAILED select <%s>: %s" % (_check, e))
+                self.flat.append("comment select failed <%s>" % _check)
                 raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[_mapping_table]
+            _obj = self.dbengine.mapper_objects[_prefix]
             _query = self.orm_session.query(_obj).filter_by(**_filter)
             _count = _query.count()
             if _count and (_check_only or _count==1):
-                self.flat.append(("select "+_table, _filter))
+                self.flat.append(("select "+_check, _filter))
                 if not _check_only:
-                    self.dbengine.select(_mapping_table, _query.one())
+                    self.dbengine.select(_prefix, _query.one())
                 return True
             elif _count:
-                self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_table, _count, _filter))
-                self.flat.append("comment select failed <%s>" % _table)
+                self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_check, _count, _filter))
+                self.flat.append("comment select failed <%s>" % _check)
                 raise SequencerInterruption()
         return False
     def update(self, _check, _check_update, _update):
+        """
+        _check: a mapping record to check exitence of database record
+        _check_update: a mapping record to check if database record must be updated
+        _update: a mapping record to update the database record
+        returns: 0 (no record found), 1 (record found / not updated), 2 (record found / updated)
+        """
         if self.dbengine:
             _mapping_table = _check.split(':')[0]
             if _check_update.split(':')[0] != _mapping_table or \
@@ -260,13 +277,12 @@ class MapperSequencer(object):
                     self.flat.append("comment update failed <%s>" % _update)
                     raise SequencerInterruption()
                 self.flat.append(("update "+_check, check_filter))
-                self.dbengine.update(_mapping_table, _check_update_filter, _update_filter, _query.one())
-                return True
+                return 1+int(self.dbengine.update(_mapping_table, _check_update_filter, _update_filter, _query.one()))
             elif _count:
                 self.log.error("  FAILED update <%s>, %d records found, query: %s" % (_check, _count, check_filter))
                 self.flat.append("comment update failed <%s>" % _check)
                 raise SequencerInterruption()
-        return False
+        return 0
     def commit(self):
         self.flat.append("commit")
         if self.dbengine:
@@ -423,11 +439,12 @@ class dbLoader(object):
 #                    print '<%s>'%getattr(_object, _key)
 #                    print '<%s>'%_value
                     _must_update = True
+                    break
             if _must_update:
                 for _key, _value in _update.iteritems():
                     _object.__setattr__(_key, _value)
                 self.to_flush.append(('update ', _table, _update))
-            return True
+            return _must_update
         except Exception, e:
             self.orm_session.rollback()
             self.log.error('INJECT ABORTED update <%s> exception: %s' % (_table, e))
