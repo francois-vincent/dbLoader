@@ -13,7 +13,7 @@ This is an example sequencer and mapper
 import os, json, time, sys
 import files.simpleLogger as logger
 from dbMapLoader import MapperSequencer, _records, _record, _sub_records, _sub_record, Shell
-from dbMapLoader import dbLoader, translators
+from dbMapLoader import Injector, translators
 from datetime import datetime
 from pprint import pformat
 
@@ -136,6 +136,7 @@ class myMapperSequencer(MapperSequencer):
             self.commit()
         for record in records:
             self.process_record(record)
+            self.commit()
 
     @_record
     def process_record(self, record):
@@ -146,7 +147,6 @@ class myMapperSequencer(MapperSequencer):
         self.multi_process_steps(record.steps)
         if not self.update("recipeslg:check", "recipeslg:check_update", "recipeslg:update"):
             self.create("recipeslg")
-        self.commit()
 
     @_sub_records
     def multi_process_steps(self, steps):
@@ -275,7 +275,7 @@ def inject_from_master(records_json, database_connection, check_only=False, no_c
         if not sequencer_only:
             flat_inj = check_file_access(products, 'flat_inj', ext=time.strftime('_%Y-%m-%d_%H-%M-%S.json'),
                                          required=False, create=True)
-        connection = json_load(database_connection)
+            connection = json_load(database_connection)
         # load records, mapper and sequencer and launch injection
         if _eval:
             records = json_load(records_json)
@@ -283,13 +283,13 @@ def inject_from_master(records_json, database_connection, check_only=False, no_c
             records = json_load(records_json, 'json')
         if not (isinstance(records, list) and isinstance(records[0], dict)):
             raise RuntimeError('JSON records file <%s> should be a list of dictionaries' % records_json)
-        dsn = connection['dsn'] % connection['connection_context']
-        kwargs = dict(records_json=records_json, connection=connection)
         if sequencer_only:
             injector = None
             no_check = True
         else:
-            injector = dbLoader(dsn, kwargs, log)
+            dsn = connection['dsn'] % connection['connection_context']
+            kwargs = dict(records_json=records_json, connection=connection)
+            injector = Injector(dsn, kwargs, log)
         mapseq = myMapperSequencer(log=log, imports=(('datetime', ('datetime',)),))
         if no_check or injector.check_mapping(mapseq.mapper):
             if not check_only:

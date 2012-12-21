@@ -316,7 +316,7 @@ class Shell(object):
 class InjectorInterruption(Exception):
     pass
 
-class dbLoader(object):
+class Injector(object):
     def __init__(self, connection_dsn, kwargs, log=0):
         """
         The constructor establishes the connection to the database and collects some
@@ -422,7 +422,6 @@ class dbLoader(object):
             self.to_flush.append(('create ', _table, _obj))
             self.orm_session.add(_obj)
         except Exception, e:
-            self.orm_session.rollback()
             self.log.error('INJECT ABORTED create <%s>: %s' % (_table, e))
             raise InjectorInterruption()
     def select(self, _table, _object):
@@ -451,11 +450,18 @@ class dbLoader(object):
                 self.to_flush.append(('update ', _table, _update))
             return _must_update
         except Exception, e:
-            self.orm_session.rollback()
             self.log.error('INJECT ABORTED update <%s> exception: %s' % (_table, e))
             raise InjectorInterruption()
     def commit(self):
-        self.orm_session.commit()
+        try:
+            self.orm_session.commit()
+        except Exception, e:
+            self.log.error('INJECT ABORTED commit')
+            raise InjectorInterruption()
         self._flush_flat()
     def flush(self):
-        self.orm_session.flush()
+        try:
+            self.orm_session.flush()
+        except Exception, e:
+            self.log.error('INJECT ABORTED flush')
+            raise InjectorInterruption()
