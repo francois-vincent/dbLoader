@@ -119,7 +119,7 @@ class testSequencer(unittest.TestCase):
         unittest.TestCase.__init__(self, *args, **kwargs)
     @classmethod
     def setUpClass(cls):
-        "create a new empty test database"
+        print "Creating a new empty test database..."
         null = open('/dev/null', 'w')
         create_cmd = 'createdb %s -U postgres' % test_database_name
         drop_cmd = 'dropdb %s -U postgres' % test_database_name
@@ -143,8 +143,7 @@ class testSequencer(unittest.TestCase):
         self.kwargs = dict(records_json=records_json, connection=connection)
         self.injector = Injector(dsn, self.kwargs, log=0)
     def test_mapping(self):
-        self.mapseq = myMapperSequencer(log=0, imports=(('datetime', ('datetime',)),))
-        self.assertTrue(self.injector.check_mapping(self.mapseq.mapper))
+        self.assertTrue(self.injector.check_mapping(myMapperSequencer.mapper))
     def test_bad_mapping(self):
         self.bad_mapping = {'toto': {}}
         sys.stderr = StringIO()
@@ -184,11 +183,19 @@ class testSequencer(unittest.TestCase):
         self.assertTrue(self.mapseq.multi_process_records(records_json))
         self.assertEqual(len(self.injector.flat), 3)
         self.assertEqual(self.injector.engine.execute('select cookingsteplgname from sch_dbanalytic.cookingstepslg where cookingstepid=1').fetchall()[0][0], new_desc)
+    def test_modified_id_injection(self):
+        self.mapseq = myMapperSequencer(log=0, imports=(('datetime', ('datetime',)),))
+        records_json[0]['id'] = 118833
+        self.injector.prepare_session(self.mapseq.mapper).prepare_injection(records_json)
+        Shell(self.mapseq, self.injector)
+        self.assertTrue(self.mapseq.multi_process_records(records_json))
+        self.assertEqual(len(self.injector.flat), 9)
+        self.assertEqual(len(self.injector.engine.execute('select * from sch_dbanalytic.recipeslg').fetchall()), 2)
 
 if __name__ == '__main__':
-#    suite = unittest.TestLoader().loadTestsFromTestCase(testSequencer)
+    # this is a test scenario, thus order is relevant
     suite = unittest.TestSuite()
     for test_name in ['test_mapping', 'test_bad_mapping', 'test_bad_column', 'test_first_injection',
-                      'test_2nd_injection', 'test_modified_injection']:
+                      'test_2nd_injection', 'test_modified_injection', 'test_modified_id_injection']:
         suite.addTest(testSequencer(test_name))
     unittest.TextTestRunner(verbosity=2).run(suite)
