@@ -7,7 +7,7 @@ __mail__ = 'fvincent@groupeseb.com'
 __github__ = 'https://github.com/francois-vincent'
 
 from inspect import stack, getargvalues, getargspec
-import new, re
+import new, re, sys
 from datetime import time
 from sqlalchemy.engine import create_engine, reflection
 from sqlalchemy import MetaData, Table, orm
@@ -21,13 +21,13 @@ class miniLogger(int):
         return
     def info(self, message):
         if self >= 2:
-            print 'INFO  -', message
+            print >>sys.stderr, 'INFO  -', message
     def warning(self, message):
         if self >= 1:
-            print 'WARN  -', message
+            print >>sys.stderr, 'WARN  -', message
     def error(self, message):
         if self >= 0:
-            print 'ERROR -', message
+            print >>sys.stderr, 'ERROR -', message
 
 #      Utility functions
 # --------------------------
@@ -220,9 +220,10 @@ class MapperSequencer(object):
         return self.select(_check, _check_only=True)
     def select(self, _check, _check_only=False):
         """
-        _check: a mapping record to check exitence of database record
+        if an injector exists, will set a table in the session according to _check
+        _check: a mapping record to match 1 (or more if _check_only is True) database record
         _check_only: if set, this method will allow multiple matching records and will not update session
-        returns: True if record found
+        returns: # record(s) found
         """
         if self.dbengine:
             _prefix = _check.split(':')[0]
@@ -239,12 +240,12 @@ class MapperSequencer(object):
                 self.flat.append(("select "+_check, _filter))
                 if not _check_only:
                     self.dbengine.select(_prefix, _query.one())
-                return True
+                return _count
             elif _count:
                 self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_check, _count, _filter))
                 self.flat.append("comment select failed <%s>" % _check)
                 raise SequencerInterruption()
-        return False
+        return 0
     def update(self, _check, _check_update, _update):
         """
         _check: a mapping record to check exitence of database record

@@ -212,7 +212,8 @@ These methods are:
 - `get_tablenames()`              get table names from the database you have connected to.
 - `get_columnames(table)`         get columns names for a given table.
 - `check_mapping(mapper, kwargs)` check your mapping against the database you have connected to.
-- `prepare_inject(mapper)`        prepare injection objects an data from your mapping.
+- `prepare_session(mapper)`       prepare injection objects an data from your mapping.
+- `prepare_injection(records)`    prepare injection objects an data from your (optional) list of records.
 
 Class `Shell`. This class allows to link an injector instance to a sequencer/mapper instance.
 
