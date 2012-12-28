@@ -8,6 +8,8 @@ __github__ = 'https://github.com/francois-vincent'
 
 import unittest2 as unittest
 import subprocess
+import sys, os
+from cStringIO import StringIO
 
 test_database_name = 'testbase_loader'
 psql_fixture = 'create_dbanalytic.sql'
@@ -108,10 +110,8 @@ records_json = [
   }
 ]
 
-import sys, os
-from cStringIO import StringIO
 sys.path.insert(0, os.path.dirname(os.getcwd()))
-from dbMapLoader import MapperSequencer, Shell, Injector
+from dbMapLoader import Shell, Injector
 from sequencer import myMapperSequencer
 
 class testSequencer(unittest.TestCase):
@@ -138,18 +138,34 @@ class testSequencer(unittest.TestCase):
         self.connect()
     def tearDown(self):
         sys.stderr = sys.__stderr__
+    # ---------- Helper methods --------------------------------------------------
     def connect(self):
         dsn = connection['dsn'] % connection['connection_context']
         self.kwargs = dict(records_json=records_json, connection=connection)
         self.injector = Injector(dsn, self.kwargs, log=0)
+    def get_tables(self):
+        query = 'select * from sch_dbanalytic.users'
+        self.__class__.users = self.injector.engine.execute(query).fetchall()
+        query = 'select * from sch_dbanalytic.recipes'
+        self.__class__.recipes = self.injector.engine.execute(query).fetchall()
+        query = 'select * from sch_dbanalytic.recipeslg'
+        self.__class__.recipeslg = self.injector.engine.execute(query).fetchall()
+        query = 'select * from sch_dbanalytic.cookingsteps'
+        self.__class__.cookingsteps = self.injector.engine.execute(query).fetchall()
+        query = 'select * from sch_dbanalytic.cookingstepslg'
+        self.__class__.cookingstepslg = self.injector.engine.execute(query).fetchall()
+    # ---------- Test methods start here ---------------------------------------------
     def test_mapping(self):
+        # a good mapping passes through check_mapping
         self.assertTrue(self.injector.check_mapping(myMapperSequencer.mapper))
     def test_bad_mapping(self):
+        # a bad mapping with a bad table does not pass through check_mapping. Check error message too
         self.bad_mapping = {'toto': {}}
         sys.stderr = StringIO()
         self.assertFalse(self.injector.check_mapping(self.bad_mapping))
         self.assertIn('Table <toto> not in', sys.stderr.getvalue())
     def test_bad_column(self):
+        # a bad mapping with a bad column does not pass through check_mapping. Check error message too
         self.bad_mapping = { "cookingstepslg": {
             "cookingStepLGTechDatex": "",
         } }
@@ -157,24 +173,36 @@ class testSequencer(unittest.TestCase):
         self.assertFalse(self.injector.check_mapping(self.bad_mapping))
         self.assertIn('Column <cookingStepLGTechDatex> not in', sys.stderr.getvalue())
     def test_first_injection(self):
+        # check injection of a single recipe with cooking steps, in an empty database
         self.mapseq = myMapperSequencer(log=0, imports=(('datetime', ('datetime',)),))
         self.injector.prepare_session(self.mapseq.mapper).prepare_injection(records_json)
         Shell(self.mapseq, self.injector)
         self.assertTrue(self.mapseq.multi_process_records(records_json))
         self.assertEqual(len(self.injector.flat), 21)
-        self.assertEqual(sum(x[0] for x in self.injector.engine.execute('select cookingstepnum from sch_dbanalytic.cookingsteps').fetchall()), 15)
+        self.get_tables()
+        self.assertEqual(len(self.users), 1)
+        self.assertEqual(len(self.recipes), 1)
+        self.assertEqual(len(self.recipeslg), 1)
+        self.assertEqual(len(self.cookingsteps), 6)
+        self.assertEqual(len(self.cookingstepslg), 6)
     def test_2nd_injection(self):
+        # check injection of the same recipe just after, should change nothing
         self.mapseq = myMapperSequencer(log=0, imports=(('datetime', ('datetime',)),))
         self.injector.prepare_session(self.mapseq.mapper).prepare_injection(records_json)
         Shell(self.mapseq, self.injector)
         self.assertTrue(self.mapseq.multi_process_records(records_json))
         self.assertEqual(len(self.injector.flat), 1)
-        self.assertEqual(len(self.injector.engine.execute('select * from sch_dbanalytic.users').fetchall()), 1)
-        self.assertEqual(len(self.injector.engine.execute('select * from sch_dbanalytic.recipes').fetchall()), 1)
-        self.assertEqual(len(self.injector.engine.execute('select * from sch_dbanalytic.cookingsteps').fetchall()), 6)
-        self.assertEqual(len(self.injector.engine.execute('select * from sch_dbanalytic.cookingstepslg').fetchall()), 6)
-        self.assertEqual(sum(x[0] for x in self.injector.engine.execute('select cookingstepnum from sch_dbanalytic.cookingsteps').fetchall()), 15)
+        users, recipes, recipeslg = self.users, self.recipes, self.recipeslg
+        cookingsteps, cookingstepslg = self.cookingsteps, self.cookingstepslg
+        self.get_tables()
+        self.assertListEqual(users, self.users)
+        self.assertListEqual(recipes, self.recipes)
+        self.assertListEqual(recipeslg, self.recipeslg)
+        self.assertListEqual(cookingsteps, self.cookingsteps)
+        self.assertListEqual(cookingstepslg, self.cookingstepslg)
     def test_modified_injection(self):
+        # change one cooking step description. should change nothing except this cookingsteplg
+        # and recipeslg.recipelgInstructions
         self.mapseq = myMapperSequencer(log=0, imports=(('datetime', ('datetime',)),))
         new_desc = u"Pelez les poires, coupez-les en quatre. Retirez le coeur."
         records_json[0]['steps'][0]['desc'] = new_desc
@@ -182,15 +210,34 @@ class testSequencer(unittest.TestCase):
         Shell(self.mapseq, self.injector)
         self.assertTrue(self.mapseq.multi_process_records(records_json))
         self.assertEqual(len(self.injector.flat), 3)
-        self.assertEqual(self.injector.engine.execute('select cookingsteplgname from sch_dbanalytic.cookingstepslg where cookingstepid=1').fetchall()[0][0], new_desc)
+        users, recipes, recipeslg = self.users, self.recipes, self.recipeslg
+        cookingsteps, cookingstepslg = self.cookingsteps, self.cookingstepslg
+        self.get_tables()
+        self.assertListEqual(users, self.users)
+        self.assertListEqual(recipes, self.recipes)
+        self.assertListEqual(cookingsteps, self.cookingsteps)
+        self.assertListEqual(sorted(cookingstepslg, key=lambda x:x[0])[1:], sorted(self.cookingstepslg, key=lambda x:x[0])[1:])
+        query = 'select cookingsteplgname from sch_dbanalytic.cookingstepslg where cookingstepid=1'
+        self.assertEqual(self.injector.engine.execute(query).fetchall()[0][0], new_desc)
+        self.assertEqual(len(self.recipeslg), 1)
+        recipelg1 = list(recipeslg[0])
+        recipelg2 = list(self.recipeslg[0])
+        recipelgInstructions1 = recipelg1[4]
+        recipelgInstructions2 = recipelg2[4]
+        self.assertNotEqual(recipelgInstructions1, recipelgInstructions2)
+        self.assertListEqual(recipelg1[0:4]+recipelg1[5:-1],recipelg2[0:4]+recipelg2[5:-1])
     def test_modified_id_injection(self):
+        # change id of recipe. should add a recipe, recipelg plus links
         self.mapseq = myMapperSequencer(log=0, imports=(('datetime', ('datetime',)),))
         records_json[0]['id'] = 118833
         self.injector.prepare_session(self.mapseq.mapper).prepare_injection(records_json)
         Shell(self.mapseq, self.injector)
         self.assertTrue(self.mapseq.multi_process_records(records_json))
         self.assertEqual(len(self.injector.flat), 9)
-        self.assertEqual(len(self.injector.engine.execute('select * from sch_dbanalytic.recipeslg').fetchall()), 2)
+        query = 'select * from sch_dbanalytic.recipes'
+        self.assertEqual(len(self.injector.engine.execute(query).fetchall()), 2)
+        query = 'select * from sch_dbanalytic.recipeslg'
+        self.assertEqual(len(self.injector.engine.execute(query).fetchall()), 2)
 
 if __name__ == '__main__':
     # this is a test scenario, thus order is relevant
