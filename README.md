@@ -5,7 +5,7 @@ database supported by SQLAlchemy.
 
 It is composed of a python module **dbMapLoader.py** and an python example application **sequencer.py**.
 
-**sequencer.py** accepts as input a JSON file that is a list of _compound_ records and inject them into
+**sequencer.py** accepts as input a JSON file that is a list of _compound_ records and injects them into
 the specified database. It produces 2 different files: a post sequencer flat file and a post injection
 flat file. Detailed operations of import process is logged in a log file.
 
@@ -25,7 +25,11 @@ flat file. Detailed operations of import process is logged in a log file.
 	--eval           | -e (default=False)
 
 --check--only: check that the specified mapping is compliant with the database.
---sequencer-only: dry-run the sequencer without a databse.
+
+--sequencer-only: dry-run the sequencer without a database.
+
+--eval: will evaluate the input records via python interpreter's eval() function instead of json.load()
+
 
 ## Description
 
@@ -34,13 +38,13 @@ The main concepts at work here are:
 1. Mapping. Defines the mapping of the database tables/columns on the fields from the imported records or
    on any other data source. See _Mapping_ section below.
 
-2. Sequencement. Defines the logical sequence of the import process, in terms of operations ans loops.
+2. Sequencing. Defines the logical sequence of the import process, in terms of operations ans loops.
    See _Sequencer_ section below.
 
 3. Reflection. The schema of the database is not an input of the process. Instead, thanks to the reflection
-   (introspection) capabilities of SQLAlchemy, the schema is automatically induced from the database.
+   (introspection) capabilities of SQLAlchemy, the schema is automatically induced from the database itself.
 
-4. 2-phases injection. The import process is done in 2 phases. First phase is _mapping/sequencement_ and
+4. 2-phases injection. The import process is done in 2 phases. First phase is _mapping/sequencing_ and
    consists in unrolling the compound records to produce a flat structure in which all fields have been
    evaluated from the input records and from the database when possible.
    Second phase is _injection_ and consists in actually importing the evaluated fields into the database.
@@ -86,14 +90,14 @@ a new line in this same table.
 
 Values in the mapping are expressions enclosed in strings:
 - All expressions will be evaluated during the mapper/sequencer phase.
-- Expressions starting with 'session' refer to database records (usualy IDs) previously processed.
-  A `commit` or a `flush` must be performed first. The expression is in the form `session.table.column`
+- Expressions starting with 'session' refer to database records (usually IDs) previously processed.
+  A `commit()` or a `flush()` must be performed previously. The expression is in the form `session.table.column`
   or `session['table'].column` if 'table' contains a ":".
 - Expressions starting with a record name, like "record.id" or "step.order" above, refer to records
   names as specified in the _sequencer_, see below.
-- Expressions starting with 'translators' refer to user-defined converion functions. See this section below.
+- Expressions starting with 'translators' refer to user-defined conversion functions. See this section below.
 - Other expressions are regular Python expressions. You can use constants (like True or False) and any
-  builtin or imported function. Imported modules must be specified when you create sequencer instance.
+  built-in or imported function. Imported modules must be specified when you create sequencer instance.
   See _API_ section below.
 
 
@@ -138,8 +142,8 @@ Example sequencer from sequencer.py (extract):
         if not self.exists("recipecontainscookingsteps"):
             self.create("recipecontainscookingsteps")
 
-Sequencement of import is defined as a set of user-defined methods in a class derived from `MapperSequencer`.
-These methods are preceded by Python decorators related to _levels_. There a 4 levels.
+Sequencing of import is defined as a set of user-defined methods in a class derived from `MapperSequencer`.
+These methods are preceded by Python decorators related to _levels_. There are 4 levels.
 
 The first level (root) method must be preceded by decorator `_records`. This method has a single parameter which
 will hold a python list of the records to import into the database. This method will return True on success and
@@ -162,17 +166,17 @@ The purpose of decorators is to manage sequencer interruption (via special Excep
 logging, global variables, return values and other data conversions between levels.
 
 It is mandatory to have a new method each time you have to loop over a sub-record. This comes from the fact
-that naming of sub-records is done implicitely by the name of the formal parameter of the method.
+that naming of sub-records is done implicitly by the name of the formal parameter of the method.
 
 
 ## API
 
-The module **dbMapLoader.py** defines 2 main classes `MapperSequencer` for mapping/sequencement and
+The module **dbMapLoader.py** defines 2 main classes `MapperSequencer` for mapping/sequencing and
 `Injector` for injection.
 
 Typical usage of `MapperSequencer` is to create your own class derived from it. In this class you will
 define your mapping in `mapper` class variable. See _Mapping_ section above.
-You will also define your sequencement by writing a set of methods with a root method that starts the whole
+You will also define your sequencing by writing a set of methods with a root method that starts the whole
 mapping/sequencer process. See _Sequencer_ section above.
 
 Class `MapperSequencer` offers a set of methods that you use in your sequencer for checking, skipping or
@@ -184,20 +188,20 @@ These methods are:
 - `select(_table)`	                       selects record with mapping '_table'. Can fail if multiple records found.
                                            returns True if one record found, False if no record found.
 - `exists(_table)`                         returns True if one or more records found. Can not fail.
-- `update(_check, _check_update, _update)` preforms `select(_check)` and if success, compares fields of selected reord
+- `update(_check, _check_update, _update)` preforms `select(_check)` and if success, compares fields of selected record
                                            to fields of '_check_update'. If at least one field differ, will update the
-                                           record with values in '_update'.
-- `flush()`     flushes the session. Necessary to set `session` variable from previous `create` or `update`.
+                                           whole record with values in '_update'.
+- `flush()`     flushes the session. Necessary to set `session` variable from previous `create()` or `update()`.
 - `commit()`    commits the session.
 - `comment()`   allows to insert a comment into the sequencer flat file.
 - `log.<criticity>(message)` allows to insert a message in the log file. <criticity> has values among: info,
    warning and error.
 - `abort()`     allows to abort sequencer (root user-defined method will return False).
 
-Methods `select`, `create` and `update` set the global variable `session` according to the exact value that is present
-into the database. Method `exist` does not set `session`. See _Mapping_ section above.
+Methods `select()`, `create()` and `update()` set the global variable `session` according to the exact value that is present
+into the database. Method `exist()` does not set `session`. See _Mapping_ section above.
 
-Method __init__() of MapperSequencer has 2 optional parameter:
+Method `__init__()` of MapperSequencer has 2 optional parameters:
 - a log object (default=1) that defaults to a raw console logger at warning level.
 - a tuple of imports specifications. An import specification is a tuple (module_name, symbols).
   if symbols evaluates to False, this import specification will result in `import module_name`.
@@ -217,7 +221,7 @@ These methods are:
 
 Class `Shell`. This class allows to link an injector instance to a sequencer/mapper instance.
 
-## User-defined convertion functions
+## User-defined conversion functions
 
 Example user-defined conversion from sequencer.py (extract):
 
@@ -247,12 +251,12 @@ A record is a dictionary (key/values) where keys are field names and value types
 of JSON permitted types:
 
 	Unicode string,
-	Nnumerical value (float or integer),
+	Numerical value (float or integer),
 	Null,
 	List or dictionary.
 
 Such a definition suggests that a recipe can be completely defined into a single (nested / complex) record,
-with associated records (like steps, lists of ingredients, comments…) directly specified in the recipe as lists of subrecords.
+with associated records (like steps, lists of ingredients, comments…) directly specified in the recipe as lists of sub-records.
 
 	{
 		Name: “fish and chips”,
@@ -277,21 +281,13 @@ Dates are specified as string fields: “Year month day hour minute second” fo
 Durations can be specified either as string “1 h 15 min”, “20 min” or as an integer: 75 (meaning 1h 15min).
 
 
-## Dependencies
-
-You will have to install SQLAlchemy plus any Python wrapper to your favorite databases adapter (psycopg2
-for PostgreSQL, pymysql for MySQL).
-
-Command line parsing (for the standalone usage) requires pythor.py which you can get from my github.
-
-
 ## Getting started
 
 1. Git clone me and get pythor.py from [pythor] (https://github.com/francois-vincent/pythor)
 
-2. Start your database server and create your database. The less required is a databse with all mappings
+2. Start your database server and create your database. The less required is a database with all mappings
    already present. Edit your connection file with your connection parameters.
-   If you do not have a databse, you can use option `--sequencer-only`.
+   If you do not have a database, you can use option `--sequencer-only`.
 
 3. Edit sequencer.py (i.e. edit your mapping, your sequencer and products). Products is a dictionary
    specifying log and flat files names and prefixes.
@@ -309,6 +305,21 @@ Command line parsing (for the standalone usage) requires pythor.py which you can
         python sequencer.py Records.json -s
 
 7. You can inspect log file and flat file from injector in the folders specified in products.
+
+## Tests
+
+A non-regression test scenario is provided in file test/testLoader.py. This file is all-inclusive and only requires
+the schema of the database.
+
+
+## Dependencies
+
+You will have to install SQLAlchemy plus any Python wrapper to your favorite databases adapter (psycopg2
+for PostgreSQL, pymysql for MySQL).
+
+Command line parsing (for the standalone usage) requires pythor.py which you can get from my github.
+
+Running no regression tests requires Python module Unittest2.
 
 
 ## Authors
