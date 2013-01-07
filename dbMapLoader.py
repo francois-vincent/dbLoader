@@ -336,7 +336,7 @@ class Injector(object):
             insp = reflection.Inspector.from_engine(engine)
         except Exception, e:
             message = "Couldn't connect to <%s>: %s" % (connection_dsn, e)
-            message += kwargs['connection'].get('error', '')%kwargs['connection']['connection_context']
+            message += kwargs['connection'].get('error', '') % kwargs['connection']['connection_context']
             raise RuntimeError(message)
         self.engine = engine
         self.inspector = insp

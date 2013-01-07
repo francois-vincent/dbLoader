@@ -188,13 +188,13 @@ These methods are:
 - `select(_table)`	                       selects record with mapping '_table'. Can fail if multiple records found.
                                            returns True if one record found, False if no record found.
 - `exists(_table)`                         returns True if one or more records found. Can not fail.
-- `update(_check, _check_update, _update)` preforms `select(_check)` and if success, compares fields of selected record
+- `update(_check, _check_update, _update)` performs `select(_check)` and if success, compares fields of selected record
                                            to fields of '_check_update'. If at least one field differ, will update the
                                            whole record with values in '_update'.
 - `flush()`     flushes the session. Necessary to set `session` variable from previous `create()` or `update()`.
 - `commit()`    commits the session.
 - `comment()`   allows to insert a comment into the sequencer flat file.
-- `log.<criticity>(message)` allows to insert a message in the log file. <criticity> has values among: info,
+- `log.<criticity>(message)` allows to insert a message in the log file. 'criticity' has values among: info,
    warning and error.
 - `abort()`     allows to abort sequencer (root user-defined method will return False).
 
