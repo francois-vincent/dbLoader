@@ -90,7 +90,7 @@ def inject():
             remote = os.path.normpath(remote)
             get(remote, local)
         res = run('find flat_inj -maxdepth 1 -type f', warn_only=True)
-        if not res.failed:
+        if res and not res.failed:
             local = os.path.join('_host_'+target, 'flat_inj')
             if not os.path.exists(local):
                 os.makedirs(local)
@@ -100,7 +100,7 @@ def inject():
                 if not os.path.exists(path):
                     get(remote, local)
         res = run('find flat_seq -maxdepth 1 -type f', warn_only=True)
-        if not res.failed:
+        if res and not res.failed:
             local = os.path.join('_host_'+target, 'flat_seq')
             if not os.path.exists(local):
                 os.makedirs(local)
