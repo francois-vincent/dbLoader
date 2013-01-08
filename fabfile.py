@@ -6,6 +6,16 @@ __author__ = 'François Vincent'
 __mail__ = 'fvincent@groupeseb.com'
 __github__ = 'https://github.com/francois-vincent'
 
+"""
+This is a fabric script that launches injection directly onto the remote target host
+(x5-7 speed up for big data set)
+This script:
+- creates a python virtualenv and installs the required versions of psycopg2 and sqlalchemy
+- uploads all the required files (python scripts, data files)
+- run the mapper/sequencer on the remote target
+- downloads all the products files
+"""
+
 from fabric.api import env, task
 from fabric.context_managers import cd, prefix
 from fabric.operations import put, get, run
