@@ -6,31 +6,14 @@ __author__ = 'François Vincent'
 __mail__ = 'fvincent@groupeseb.com'
 __github__ = 'https://github.com/francois-vincent'
 
-from fabric.api import env, run
-from fabric.context_managers import settings, cd, prefix
-from fabric.operations import put, get
+from fabric.api import env
+from fabric.context_managers import cd, prefix
+from fabric.operations import put, get, run
 from tempfile import NamedTemporaryFile
 import os.path
 from dbMapLoader import mapDict
-from cStringIO import StringIO
 
 WORKING_DIRECTORY = '.dbLoader'
-
-dependencies = """
-psycopg2==2.4.5
-sqlalchemy==0.7.9
-"""
-
-test_psycopg2 = """
-# -*- coding: utf-8 -*-
-import psycopg2
-print psycopg2.__version__
-"""
-test_sqlalchemy = """
-# -*- coding: utf-8 -*-
-import sqlalchemy
-print sqlalchemy.__version__
-"""
 
 FabContext = mapDict(
     working_dir = WORKING_DIRECTORY,
@@ -38,6 +21,11 @@ FabContext = mapDict(
     data_file = 'files/MyActifry.json',
     injection_options = '',
 )
+
+dependencies = """
+psycopg2==2.4.5
+sqlalchemy==0.7.9
+"""
 
 connection = {
     "connection_context" : {
@@ -67,21 +55,19 @@ def inject():
         return
     print "will connect to", env.hosts
     target = env.hosts[0].split('@')[1]
-    # check/create virtualenv '.dbLoader' with subfolder '.dbLoader/files' in ~admin
-    with settings(warn_only=True):
-        res = run('ls %(working_dir)s/bin/activate' % FabContext)
+    # check/create virtualenv '.dbLoader' with subfolder 'files' in ~admin
+    res = run('ls %(working_dir)s/bin/activate' % FabContext, warn_only=True)
     if res.failed:
         run('virtualenv %(working_dir)s' % FabContext)
     with cd(WORKING_DIRECTORY):
         #  check/create 'files' subdirectory
-        with settings(warn_only=True):
-            res = run('ls files')
+        res = run('ls files', warn_only=True)
         if res.failed:
             run('mkdir files')
         with prefix('source bin/activate'):
             # create remote virtualenv python installation (psycopg2, sqlalchemy)
             upload_data2file(dependencies, 'reqs.txt')
-#            run('pip install -r reqs.txt')
+            run('pip install -r reqs.txt')
         # upload classes, sequencer and connection parameters
         put('dbMapLoader.py', 'dbMapLoader.py')
         put(FabContext.sequencer, FabContext.sequencer)
@@ -92,12 +78,34 @@ def inject():
         # upload data file
         put(FabContext.data_file, 'files/'+os.path.basename(FabContext.data_file))
         # launch remote injection command
-#        with prefix('source bin/activate'):
-#            run('python %(sequencer)s files/%(data_file)s %(injection_options)s')
-#        # download the log file, prepending hostname_ to log filename
-#        with settings(warn_only=True):
-#            myout = StringIO()
-#            res = run('ls log', stdout=myout)
-#        if not res.failed:
-#            last_log = sorted(myout.getvalue().split())[-1]
-#            get('log/'+last_log, 'log/'+target+'_'+last_log)
+        with prefix('source bin/activate'):
+            run('python %(sequencer)s files/%(data_file)s %(injection_options)s')
+        # download result files (log, flat_inj et flat_seq)
+        res = run('find log -maxdepth 1 -type f', warn_only=True)
+        if res and not res.failed:
+            local = os.path.join('_host_'+target, 'log')
+            if not os.path.exists(local):
+                os.makedirs(local)
+            remote = sorted(res.split())[-1]
+            remote = os.path.normpath(remote)
+            get(remote, local)
+        res = run('find flat_inj -maxdepth 1 -type f', warn_only=True)
+        if not res.failed:
+            local = os.path.join('_host_'+target, 'flat_inj')
+            if not os.path.exists(local):
+                os.makedirs(local)
+            for remote in res.split():
+                remote = os.path.normpath(remote)
+                path = os.path.join(local, remote)
+                if not os.path.exists(path):
+                    get(remote, local)
+        res = run('find flat_seq -maxdepth 1 -type f', warn_only=True)
+        if not res.failed:
+            local = os.path.join('_host_'+target, 'flat_seq')
+            if not os.path.exists(local):
+                os.makedirs(local)
+            for remote in res.split():
+                remote = os.path.normpath(remote)
+                path = os.path.join(local, remote)
+                if not os.path.exists(path):
+                    get(remote, local)
