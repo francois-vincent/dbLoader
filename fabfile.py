@@ -6,7 +6,7 @@ __author__ = 'François Vincent'
 __mail__ = 'fvincent@groupeseb.com'
 __github__ = 'https://github.com/francois-vincent'
 
-from fabric.api import env
+from fabric.api import env, task
 from fabric.context_managers import cd, prefix
 from fabric.operations import put, get, run
 from tempfile import NamedTemporaryFile
@@ -46,6 +46,7 @@ def upload_data2file(data, remote_filename):
         temp_file.flush()
         put(temp_file.name, remote_filename)
 
+@task
 def inject():
     if not env.hosts:
         print "No target defined. Please use option '-H user@host'."
@@ -53,8 +54,7 @@ def inject():
     if not '@' in env.hosts[0]:
         print "No user specified in target. Please use option '-H user@host'."
         return
-    print "will connect to", env.hosts
-    target = env.hosts[0].split('@')[1]
+    print "will connect to", env.host_string
     # check/create virtualenv '.dbLoader' with subfolder 'files' in ~admin
     res = run('ls %(working_dir)s/bin/activate' % FabContext, warn_only=True)
     if res.failed:
@@ -83,7 +83,7 @@ def inject():
         # download result files (log, flat_inj et flat_seq)
         res = run('find log -maxdepth 1 -type f', warn_only=True)
         if res and not res.failed:
-            local = os.path.join('_host_'+target, 'log')
+            local = os.path.join('_host_'+env.host, 'log')
             if not os.path.exists(local):
                 os.makedirs(local)
             remote = sorted(res.split())[-1]
@@ -91,7 +91,7 @@ def inject():
             get(remote, local)
         res = run('find flat_inj -maxdepth 1 -type f', warn_only=True)
         if res and not res.failed:
-            local = os.path.join('_host_'+target, 'flat_inj')
+            local = os.path.join('_host_'+env.host, 'flat_inj')
             if not os.path.exists(local):
                 os.makedirs(local)
             for remote in res.split():
@@ -101,7 +101,7 @@ def inject():
                     get(remote, local)
         res = run('find flat_seq -maxdepth 1 -type f', warn_only=True)
         if res and not res.failed:
-            local = os.path.join('_host_'+target, 'flat_seq')
+            local = os.path.join('_host_'+env.host, 'flat_seq')
             if not os.path.exists(local):
                 os.makedirs(local)
             for remote in res.split():
