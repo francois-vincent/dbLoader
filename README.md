@@ -317,12 +317,12 @@ the schema of the database.
 A Python fabric script is provided that allows to run the standalone script directly on the target computer.
 This allows to speed up injection process by a factor 5 to 7, especially when the data set to inject is huge.
 
-You can change the remote command line in the data structure FabContext.
+You can change the remote command line in the data structure `FabContext`.
 
-You can change the connection parameters in the data structure connection.
+You can change the connection parameters in the data structure `connection`.
 
 The products of the remote injection (log and flat files) will be downloaded back in local computer, in a directory named
-_host_<remote_host_name>.
+\_host\_\<remote_host_name\>.
 
 
 ## Dependencies
