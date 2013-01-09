@@ -100,9 +100,9 @@ def inject():
         put(FabContext.data_file, 'files')
         # launch remote injection command
         with prefix('source bin/activate'):
-            run('python %(sequencer)s files/%(data_file)s %(injection_options)s')
+            run('python %(sequencer)s %(data_file)s %(injection_options)s')
         # download result files (log, flat_inj and flat_seq)
-        # dowload last log file
+        # download last log file
         res = run('find log -maxdepth 1 -type f', warn_only=True)
         if res and not res.failed:
             local = os.path.join('_host_'+env.host, 'log')
@@ -112,7 +112,6 @@ def inject():
             remote = sorted(res.split())[-1]
             remote = os.path.normpath(remote)
             get(remote, local)
-        # download all new flat_inj files
+        # download all new flat files
         download_new_files('flat_inj')
-        # download all new flat_seq files
         download_new_files('flat_seq')
