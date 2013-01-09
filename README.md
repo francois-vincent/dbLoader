@@ -312,6 +312,16 @@ A non-regression test scenario is provided in file test/testLoader.py. This file
 the schema of the database.
 
 
+## Remote execution
+
+A Python fabric script is provided that allows to run the standalone script directly on the target computer.
+This allows to speed up injection process by a factor 5 to 7, especially when the data set to inject is huge.
+
+
+A non-regression test scenario is provided in file test/testLoader.py. This file is all-inclusive and only requires
+the schema of the database.
+
+
 ## Dependencies
 
 You will have to install SQLAlchemy plus any Python wrapper to your favorite databases adapter (psycopg2
@@ -320,6 +330,8 @@ for PostgreSQL, pymysql for MySQL).
 Command line parsing (for the standalone usage) requires pythor.py which you can get from my github.
 
 Running no regression tests requires Python module Unittest2.
+
+Running remote script requires Python module fabric.
 
 
 ## Authors
