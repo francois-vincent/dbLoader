@@ -1,0 +1,82 @@
+[
+  {
+    "total_time": 54, 
+    "nutritions": [], 
+    "ingredients_summary": [
+      "1 kg de poires m\u00fbres", 
+      "50 g de groseilles \u00e9grapp\u00e9es", 
+      "50 g de sucre", 
+      "4 feuilles de g\u00e9latine", 
+      "10 cl de cr\u00e8me liquide", 
+      "2 cuill\u00e8res \u00e0 soupe d'alcool de poire", 
+      "10 cl d'eau"
+    ], 
+    "tags": [], 
+    "preparation_time": 45, 
+    "created": "2012-09-05T19:13:26", 
+    "recipe": "Bavaroise aux poires et aux groseilles", 
+    "modified": "2012-12-19T16:39:27",
+    "summary": "", 
+    "steps": [
+      {
+        "modified_by": "/v1/users/42/", 
+        "created": "2012-09-05T19:13:28", 
+        "modified": "2012-09-05T19:13:28", 
+        "created_by": "/v1/users/42/", 
+        "id": 2047, 
+        "order": 0, 
+        "desc": "Pelez les poires, coupez-les en deux. Retirez le coeur."
+      }, 
+      {
+        "modified_by": "/v1/users/42/", 
+        "created": "2012-09-05T19:13:28", 
+        "modified": "2012-09-05T19:13:28", 
+        "created_by": "/v1/users/42/", 
+        "id": 2048, 
+        "order": 1, 
+        "desc": "Dans l'autocuiseur, mettez les poires, le sucre et l'eau. Fermez l'autocuiseur."
+      }, 
+      {
+        "modified_by": "/v1/users/42/", 
+        "created": "2012-09-05T19:13:29", 
+        "modified": "2012-09-05T19:13:29", 
+        "created_by": "/v1/users/42/", 
+        "id": 2049, 
+        "order": 2, 
+        "desc": " D\u00e8s que la vapeur s'\u00e9chappe, baissez le feu et laissez cuire selon le temps indiqu\u00e9."
+      }, 
+      {
+        "modified_by": "/v1/users/42/", 
+        "created": "2012-09-05T19:13:29", 
+        "modified": "2012-09-05T19:13:29", 
+        "created_by": "/v1/users/42/", 
+        "id": 2050, 
+        "order": 3, 
+        "desc": "Ouvrez l'autocuiseur et \u00e9gouttez les poires. Laissez-les refroidir. Fouettez la cr\u00e8me. Passez les feuilles de g\u00e9latine sous l'eau. Faites fondre la g\u00e9latine lav\u00e9e dans 10 cl du jus de cuisson des poires encore chaud. Mixez 800 gr de poires, incorporez le sirop avec la g\u00e9latine puis la cr\u00e8me fouett\u00e9e. Emincez le reste des poires."
+      }, 
+      {
+        "modified_by": "/v1/users/42/", 
+        "created": "2012-09-05T19:13:29", 
+        "modified": "2012-09-05T19:13:29", 
+        "created_by": "/v1/users/42/", 
+        "id": 2051, 
+        "order": 4, 
+        "desc": "Versez dans un moule \u00e0 cake une partie de la pur\u00e9e de poires. Disposez une couche de poires \u00e9minc\u00e9es et des groseilles. Puis ajoutez une couche de pur\u00e9e de poires. Renouvelez l'op\u00e9ration plusieurs fois. Terminez par une couche de pur\u00e9e de poires. Laissez prendre au r\u00e9frig\u00e9rateur pendant 12 heures. "
+      }, 
+      {
+        "modified_by": "/v1/users/42/", 
+        "created": "2012-09-05T19:13:29", 
+        "modified": "2012-09-05T19:13:29", 
+        "created_by": "/v1/users/42/", 
+        "id": 2052, 
+        "order": 5, 
+        "desc": "D\u00e9moulez, d\u00e9corez avec de la cr\u00e8me chantilly et des groseilles. Servez avec un coulis de fruits rouges."
+      }
+    ], 
+    "cooking_time": 9, 
+    "yield_value": "4.0", 
+    "category": null, 
+    "id": 183, 
+    "yield_unit": "persons"
+  }
+]

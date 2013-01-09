@@ -57,6 +57,18 @@ def upload_data2file(data, remote_filename):
         temp_file.flush()
         put(temp_file.name, remote_filename)
 
+def download_new_files(folder):
+    res = run('find %s -maxdepth 1 -type f' % folder, warn_only=True)
+    if res and not res.failed:
+        local = os.path.join('_host_'+env.host, folder)
+        if not os.path.exists(local):
+            os.makedirs(local)
+        for remote in res.split():
+            remote = os.path.normpath(remote)
+            path = os.path.join(local, remote)
+            if not os.path.exists(path):
+                get(remote, local)
+
 @task
 def inject():
     if not env.hosts:
@@ -66,15 +78,15 @@ def inject():
         print "No user specified in target. Please use option '-H user@host'."
         return
     print "will connect to", env.host_string
-    # check/create virtualenv '.dbLoader' with subfolder 'files' in ~admin
+    # check/create virtualenv '.dbLoader' in ~
     if not files.exists('%(working_dir)s/bin/activate' % FabContext):
         run('virtualenv %(working_dir)s' % FabContext)
     with cd(WORKING_DIRECTORY):
         #  check/create 'files' subdirectory
         if not files.exists('files'):
             run('mkdir files')
+        # create remote virtualenv python installation (psycopg2, sqlalchemy)
         with prefix('source bin/activate'):
-            # create remote virtualenv python installation (psycopg2, sqlalchemy)
             upload_data2file(dependencies, 'reqs.txt')
             run('pip install -r reqs.txt')
         # upload classes, sequencer and connection parameters
@@ -90,31 +102,17 @@ def inject():
         with prefix('source bin/activate'):
             run('python %(sequencer)s files/%(data_file)s %(injection_options)s')
         # download result files (log, flat_inj and flat_seq)
+        # dowload last log file
         res = run('find log -maxdepth 1 -type f', warn_only=True)
         if res and not res.failed:
             local = os.path.join('_host_'+env.host, 'log')
             if not os.path.exists(local):
                 os.makedirs(local)
+            # only get the last one
             remote = sorted(res.split())[-1]
             remote = os.path.normpath(remote)
             get(remote, local)
-        res = run('find flat_inj -maxdepth 1 -type f', warn_only=True)
-        if res and not res.failed:
-            local = os.path.join('_host_'+env.host, 'flat_inj')
-            if not os.path.exists(local):
-                os.makedirs(local)
-            for remote in res.split():
-                remote = os.path.normpath(remote)
-                path = os.path.join(local, remote)
-                if not os.path.exists(path):
-                    get(remote, local)
-        res = run('find flat_seq -maxdepth 1 -type f', warn_only=True)
-        if res and not res.failed:
-            local = os.path.join('_host_'+env.host, 'flat_seq')
-            if not os.path.exists(local):
-                os.makedirs(local)
-            for remote in res.split():
-                remote = os.path.normpath(remote)
-                path = os.path.join(local, remote)
-                if not os.path.exists(path):
-                    get(remote, local)
+        # download all new flat_inj files
+        download_new_files('flat_inj')
+        # download all new flat_seq files
+        download_new_files('flat_seq')
