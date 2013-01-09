@@ -318,10 +318,6 @@ A Python fabric script is provided that allows to run the standalone script dire
 This allows to speed up injection process by a factor 5 to 7, especially when the data set to inject is huge.
 
 
-A non-regression test scenario is provided in file test/testLoader.py. This file is all-inclusive and only requires
-the schema of the database.
-
-
 ## Dependencies
 
 You will have to install SQLAlchemy plus any Python wrapper to your favorite databases adapter (psycopg2
