@@ -93,9 +93,10 @@ def inject():
         put('dbMapLoader.py', '.')
         put(FabContext.sequencer, '.')
         upload_data2file(repr(connection), 'connection.json')
-        # upload logger
+        # upload logger and cmd line parser
         put('files/__init__.py', 'files')
         put('files/simpleLogger.py', 'files')
+        put('files/pythor.py', 'files')
         # upload data file
         put(FabContext.data_file, 'files')
         # launch remote injection command

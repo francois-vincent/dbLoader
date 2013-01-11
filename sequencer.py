@@ -305,13 +305,13 @@ def inject_from_master(records_json, database_connection, check_only=False, no_c
 if __name__ == '__main__':
     # this is the command line frontend
     # module pythor can be found on my github
-    from  pythor import cmdLineExtract, autoShort
+    from  files.pythor import cmdLineExtract
 
     class CommandLine(cmdLineExtract):
         """
         This application will help you inject a set of compound records into any kind of relational database supported by SQLAlchemy.
         """
-        options_aliases = autoShort
+        options_aliases = cmdLineExtract.autoShort
         def run(self, records_json, database='connection.json', check_only=bool(), no_check=bool(), sequencer_only=bool(), eval=bool()):
             inject_from_master(records_json, database, check_only, no_check, sequencer_only, eval)
 
