@@ -10,12 +10,12 @@ __github__ = 'https://github.com/francois-vincent'
 This is an example sequencer and mapper
 """
 
-import os, json, time, sys
+import os, time, sys
 import files.simpleLogger as logger
 from dbMapLoader import MapperSequencer, _records, _record, _sub_records, _sub_record, Shell
 from dbMapLoader import Injector, translators
 from datetime import datetime
-from pprint import pformat
+from files.json_pp import json_dump, json_load
 
 
 def convert_date(value):
@@ -170,28 +170,6 @@ class myMapperSequencer(MapperSequencer):
 
 # TODO rework files accesses
 
-def json_load(filename, mode='eval'):
-    """
-    using 'eval' mode allows python-style comments and datatypes in 'json' files
-    but can lead to coding problems such as unicode-escaped non-ascii chars in strings
-    for instance
-    """
-    with open(filename, 'r') as f:
-        if mode == 'json':
-            return json.load(f)
-        if mode == 'eval':
-            return eval(f.read())
-
-def json_dump(data, filename, mode='eval'):
-    """
-    using 'eval' mode allows any python datatype
-    """
-    with open(filename, 'w') as f:
-        if mode == 'json':
-            json.dump(data, f, indent=2)
-        if mode == 'eval':
-            f.write(pformat(data))
-
 def check_prefixes(prefixes):
     for p in set(prefixes):
         check_prefix(p)
@@ -305,7 +283,7 @@ def inject_from_master(records_json, database_connection, check_only=False, no_c
 if __name__ == '__main__':
     # this is the command line frontend
     # module pythor can be found on my github
-    from  files.pythor import cmdLineExtract
+    from  pythor import cmdLineExtract
 
     class CommandLine(cmdLineExtract):
         """

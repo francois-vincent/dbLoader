@@ -29,8 +29,6 @@ class miniLogger(int):
         if self >= 0:
             print >>sys.stderr, 'ERROR -', message
 
-#      Utility functions
-# --------------------------
 class mapDict(dict):
     "This interface class allows to map attribute access API and call API to dict element access API"
     __call__ = __getattr__ = dict.__getitem__
@@ -106,9 +104,7 @@ class translators:
         """converts an integer or a string like 'xx h yy min' to time,
         with great flexibility"""
         try:
-            val = int(value)
-            h, m = val / 60, val % 60
-            return time(h, m)
+            return time(*divmod(int(value), 60))
         except:
             if isinstance(value, basestring):
                 x = re.compile(r'(\d+)\s*(\D*)').findall(value)

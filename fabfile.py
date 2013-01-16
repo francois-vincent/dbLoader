@@ -85,10 +85,10 @@ def inject():
         #  check/create 'files' subdirectory
         if not files.exists('files'):
             run('mkdir files')
-        # create remote virtualenv python installation (psycopg2, sqlalchemy)
+        # create remote virtualenv python installation with requirements (psycopg2, sqlalchemy)
         with prefix('source bin/activate'):
             upload_data2file(dependencies, 'reqs.txt')
-            run('pip install -r reqs.txt')
+            run('pip install -U -r reqs.txt')
         # upload classes, sequencer and connection parameters
         put('dbMapLoader.py', '.')
         put(FabContext.sequencer, '.')
