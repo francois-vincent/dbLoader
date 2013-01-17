@@ -39,7 +39,7 @@ class myMapperSequencer(MapperSequencer):
             "recipeCookTime": "translators.convert_duration(record.cooking_time)",
             "recipeTotalTime": "translators.convert_duration(record.total_time)",
             "recipePublicationDate": "datetime.now()",
-            "recipeSSModifDate": "translators.convert_date(record.modified)",
+            "recipeSSModifDate": "record.modified",
             "recipeTechDate": "datetime.now()",
         },
         "recipes:check": {
@@ -52,14 +52,14 @@ class myMapperSequencer(MapperSequencer):
             "recipePrepareTime": "translators.convert_duration(record.preparation_time)",
             "recipeCookTime": "translators.convert_duration(record.cooking_time)",
             "recipeTotalTime": "translators.convert_duration(record.total_time)",
-            "recipeSSModifDate": "translators.convert_date(record.modified)",
+            "recipeSSModifDate": "record.modified",
         },
         "recipes:update": {
             "recipeYield": "record.yield_value",
             "recipePrepareTime": "translators.convert_duration(record.preparation_time)",
             "recipeCookTime": "translators.convert_duration(record.cooking_time)",
             "recipeTotalTime": "translators.convert_duration(record.total_time)",
-            "recipeSSModifDate": "translators.convert_date(record.modified)",
+            "recipeSSModifDate": "record.modified",
             "recipeTechDate": "datetime.now()",
         },
         "recipeslg": {

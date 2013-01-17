@@ -295,7 +295,9 @@ class MapperSequencer(object):
             self.dbengine.flush()
     def comment(self, message):
         self.flat.append("comment "+message)
-    def abort(self):
+    def abort(self, message):
+        self.log.error("ABORT: "+message)
+        self.flat.append("comment ABORT: "+message)
         raise SequencerInterruption()
     def cancel_last(self):
         if self.flat:
@@ -453,7 +455,7 @@ class Injector(object):
         try:
             self.orm_session.commit()
         except Exception, e:
-            self.log.error('INJECT ABORTED commit')
+            self.log.error('INJECT ABORTED at commit: '+str(e))
             raise InjectorInterruption()
         self._flush_flat()
     def flush(self):
