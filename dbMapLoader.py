@@ -131,7 +131,7 @@ class MapperSequencer(object):
     """
     This is the class from which you will derive your mapper / sequencer
     """
-    # TODO synchronize sequencer and injector on flush, and reintroduce failed_list
+    # TODO reintroduce failed_list
     mapper = {}
     def __init__(self, log=1, imports=tuple()):
         try:
@@ -245,7 +245,7 @@ class MapperSequencer(object):
     def update(self, _check, _check_update, _update):
         """
         _check: a mapping record to check exitence of database record
-        _check_update: a mapping record to check if database record must be updated
+        _check_update: True, False or a mapping record to check if database record must be updated
         _update: a mapping record to update the database record
         returns: 0 (no record found), 1 (record found / not updated), 2 (record found / updated)
         """
@@ -267,7 +267,10 @@ class MapperSequencer(object):
             _count = _query.count()
             if _count == 1:
                 try:
-                    _check_update_filter = self._eval_mapping(_check_update)
+                    if isinstance(_check_update, bool):
+                        _check_update_filter = _check_update
+                    else:
+                        _check_update_filter = self._eval_mapping(_check_update)
                 except Exception, e:
                     self.log.error("  FAILED update <%s>: %s" % (_check_update, e))
                     self.flat.append("comment update failed <%s>" % _check_update)
@@ -430,19 +433,22 @@ class Injector(object):
         self.update_count += 1
         self.session[_table] = _object
         try:
-            _must_update = False
-            for _key, _value in _check_update.iteritems():
-                if type(_value) is str:
-                    _value = _value.decode('utf8')
-                if getattr(_object, _key) != _value:
-#                    print '-'*80
-#                    print _table, self.sequencer.records_processed
-#                    print _key
-#                    print type(getattr(_object, _key)), type(_value)
-#                    print '<%s>'%getattr(_object, _key)
-#                    print '<%s>'%_value
-                    _must_update = True
-                    break
+            if isinstance(_check_update, bool):
+                _must_update = _check_update
+            else:
+                _must_update = False
+                for _key, _value in _check_update.iteritems():
+                    if type(_value) is str:
+                        _value = _value.decode('utf8')
+                    if getattr(_object, _key) != _value:
+#                        print '-'*80
+#                        print _table, self.sequencer.records_processed
+#                        print _key
+#                        print type(getattr(_object, _key)), type(_value)
+#                        print '<%s>'%getattr(_object, _key)
+#                        print '<%s>'%_value
+                        _must_update = True
+                        break
             if _must_update:
                 for _key, _value in _update.iteritems():
                     _object.__setattr__(_key, _value)
