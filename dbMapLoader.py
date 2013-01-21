@@ -176,6 +176,8 @@ class MapperSequencer(object):
         self.log.info("SUB-RECORD END @ level %d"%(self.level+1,))
     def _eval_mapping(self, _table):
         "returns an evaluated record from the mapper"
+        if not isinstance(_table, basestring):
+            return _table
         try:
             _record_name, _record = self._get_caller_parameter()
             exec('global {0}; {0} = _record'.format(_record_name.lower()))
@@ -222,20 +224,20 @@ class MapperSequencer(object):
         returns: # record(s) found
         """
         if self.dbengine:
-            _prefix = _check.split(':')[0]
+#            _prefix = _check.split(':')[0]
             try:
                 _filter = self._eval_mapping(_check)
             except Exception, e:
                 self.log.error("  FAILED select <%s>: %s" % (_check, e))
                 self.flat.append("comment select failed <%s>" % _check)
                 raise SequencerInterruption()
-            _obj = self.dbengine.mapper_objects[_prefix]
+            _obj = self.dbengine.mapper_objects[_check]
             _query = self.orm_session.query(_obj).filter_by(**_filter)
             _count = _query.count()
             if _count and (_check_only or _count==1):
                 self.flat.append(("select "+_check, _filter))
                 if not _check_only:
-                    self.dbengine.select(_prefix, _query.one())
+                    self.dbengine.select(_check, _query.one())
                 return _count
             elif _count:
                 self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_check, _count, _filter))
@@ -251,7 +253,7 @@ class MapperSequencer(object):
         """
         if self.dbengine:
             _mapping_table = _check.split(':')[0]
-            if _check_update.split(':')[0] != _mapping_table or \
+            if (isinstance(_check_update, basestring) and _check_update.split(':')[0] != _mapping_table) or \
                _update.split(':')[0] != _mapping_table:
                 self.log.error("  FAILED update <%s>: tables must have same prefixes" % (_check, ))
                 self.flat.append("comment update failed <%s>" % _check)
@@ -267,10 +269,7 @@ class MapperSequencer(object):
             _count = _query.count()
             if _count == 1:
                 try:
-                    if isinstance(_check_update, bool):
-                        _check_update_filter = _check_update
-                    else:
-                        _check_update_filter = self._eval_mapping(_check_update)
+                    _check_update_filter = self._eval_mapping(_check_update)
                 except Exception, e:
                     self.log.error("  FAILED update <%s>: %s" % (_check_update, e))
                     self.flat.append("comment update failed <%s>" % _check_update)
