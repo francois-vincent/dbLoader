@@ -103,14 +103,14 @@ def inject():
         with prefix('source bin/activate'):
             run('python %(sequencer)s %(data_file)s %(injection_options)s' % FabContext)
         # download result files (log, flat_inj and flat_seq)
-        # download last log file
-        res = run('find log -maxdepth 1 -type f', warn_only=True)
+        # download last modified log file
+        res = run('ls log -1rt', warn_only=True)
         if res and not res.failed:
             local = os.path.join('_host_'+env.host, 'log')
             if not os.path.exists(local):
                 os.makedirs(local)
             # only get the last one
-            remote = sorted(res.split())[-1]
+            remote = res.split()[-1]
             remote = os.path.normpath(remote)
             get(remote, local)
         # download all new flat files
