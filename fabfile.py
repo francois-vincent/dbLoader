@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 __date__ = 'jan 07th, 2013'
 __author__ = 'François Vincent'
 __mail__ = 'fvincent@groupeseb.com'
@@ -13,7 +13,7 @@ This script:
 - creates a python virtualenv and installs the required versions of psycopg2 and sqlalchemy
 - uploads all the required files (python scripts, data files)
 - run the mapper/sequencer on the remote target
-- downloads all the products files
+- downloads all the new products files in a local folder "_host_<host-name>"
 """
 
 from fabric.api import env, task
@@ -69,6 +69,15 @@ def download_new_files(folder):
             if not os.path.exists(path):
                 get(remote, local)
 
+def download_last_modified(folder):
+    res = run('ls %s -1rt | tail -n 1' % folder, warn_only=True)
+    if res and not res.failed:
+        local = os.path.join('_host_'+env.host, folder)
+        if not os.path.exists(local):
+            os.makedirs(local)
+        remote = os.path.join(folder, res.strip())
+        get(remote, local)
+
 @task
 def inject():
     if not env.hosts:
@@ -86,6 +95,7 @@ def inject():
         if not files.exists('files'):
             run('mkdir files')
         # create remote virtualenv python installation with requirements (psycopg2, sqlalchemy)
+        # and install them, if required only
         module_install_list = []
         with prefix('source bin/activate'):
             for module_def in dependencies.split():
@@ -98,12 +108,12 @@ def inject():
                         module_install_list.append(module_def)
             if module_install_list:
                 upload_data2file('\n'.join(module_install_list), 'reqs.txt')
-                run('pip install -U -r reqs.txt')
-            # pythor is still not on Pypi ...
-            res = run("python -c 'import pythor'", warn_only=True)
-            if res.failed:
-                import pythor
-                put(pythor.__file__, '.')
+                run('pip install -r reqs.txt')
+        # pythor is still not on Pypi ...
+        res = run("python -c 'import pythor'", warn_only=True)
+        if res.failed:
+            import pythor
+            put(pythor.__file__, '.')
         # upload classes, sequencer and connection parameters
         put('dbMapLoader.py', '.')
         put(FabContext.sequencer, '.')
@@ -117,17 +127,7 @@ def inject():
         # launch remote injection command
         with prefix('source bin/activate'):
             run('python %(sequencer)s %(data_file)s %(injection_options)s' % FabContext)
-        # download result files (log, flat_inj and flat_seq)
-        # download last modified log file
-        res = run('ls log -1rt', warn_only=True)
-        if res and not res.failed:
-            local = os.path.join('_host_'+env.host, 'log')
-            if not os.path.exists(local):
-                os.makedirs(local)
-            # only get the last one
-            remote = res.split()[-1]
-            remote = os.path.join('log', remote)
-            get(remote, local)
-        # download all new flat files
-        download_new_files('flat_inj')
-        download_new_files('flat_seq')
+        # download last modified result files (log, flat_inj and flat_seq)
+        download_last_modified('log')
+        download_last_modified('flat_inj')
+        download_last_modified('flat_seq')
