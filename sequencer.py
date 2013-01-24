@@ -17,7 +17,10 @@ from dbMapLoader import Injector, translators
 from datetime import datetime
 from files.json_pp import json_dump, json_load
 
-
+# WARNING: it appears that date conversion from format YYYY-MM-DDTHH:MM:SS is automatic
+# so one may be tempted not to use the conversion function above.
+# if you do so, the update method will fail to consider dates as equal (because a
+# string is never equal to a date) and undue updates will silently take place !
 def convert_date(value):
     _date, _time = value.split('T')
     args = list(_date.split('-'))
@@ -39,7 +42,7 @@ class myMapperSequencer(MapperSequencer):
             "recipeCookTime": "translators.convert_duration(record.cooking_time)",
             "recipeTotalTime": "translators.convert_duration(record.total_time)",
             "recipePublicationDate": "datetime.now()",
-            "recipeSSModifDate": "record.modified",
+            "recipeSSModifDate": "translators.convert_date(record.modified)",
             "recipeTechDate": "datetime.now()",
         },
         "recipes:check": {
@@ -52,14 +55,14 @@ class myMapperSequencer(MapperSequencer):
             "recipePrepareTime": "translators.convert_duration(record.preparation_time)",
             "recipeCookTime": "translators.convert_duration(record.cooking_time)",
             "recipeTotalTime": "translators.convert_duration(record.total_time)",
-            "recipeSSModifDate": "record.modified",
+            "recipeSSModifDate": "translators.convert_date(record.modified)",
         },
         "recipes:update": {
             "recipeYield": "record.yield_value",
             "recipePrepareTime": "translators.convert_duration(record.preparation_time)",
             "recipeCookTime": "translators.convert_duration(record.cooking_time)",
             "recipeTotalTime": "translators.convert_duration(record.total_time)",
-            "recipeSSModifDate": "record.modified",
+            "recipeSSModifDate": "translators.convert_date(record.modified)",
             "recipeTechDate": "datetime.now()",
         },
         "recipeslg": {
