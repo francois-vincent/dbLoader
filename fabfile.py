@@ -24,10 +24,10 @@ from tempfile import NamedTemporaryFile
 import os.path
 from dbMapLoader import mapDict
 
-WORKING_DIRECTORY = '.dbLoader'
+REMOTE_WORKING_DIRECTORY = '.dbLoader'
 
 FabContext = mapDict(
-    working_dir = WORKING_DIRECTORY,
+    working_dir = REMOTE_WORKING_DIRECTORY,
     sequencer = 'sequencer.py',
     data_file = 'files/MA1.json',
     injection_options = '',
@@ -65,7 +65,7 @@ def download_new_files(folder):
             os.makedirs(local)
         for remote in res.split():
             remote = os.path.normpath(remote)
-            path = os.path.join(local, remote)
+            path = os.path.join((os.path.dirname(local)), remote)
             if not os.path.exists(path):
                 get(remote, local)
 
@@ -81,14 +81,29 @@ def inject():
     # check/create virtualenv '.dbLoader' in ~
     if not files.exists('%(working_dir)s/bin/activate' % FabContext):
         run('virtualenv %(working_dir)s' % FabContext)
-    with cd(WORKING_DIRECTORY):
+    with cd(REMOTE_WORKING_DIRECTORY):
         #  check/create 'files' subdirectory
         if not files.exists('files'):
             run('mkdir files')
         # create remote virtualenv python installation with requirements (psycopg2, sqlalchemy)
+        module_install_list = []
         with prefix('source bin/activate'):
-            upload_data2file(dependencies, 'reqs.txt')
-            run('pip install -U -r reqs.txt')
+            for module_def in dependencies.split():
+                if module_def:
+                    parts = module_def.split('==')
+                    res = run("python -c 'import %s as toto; print toto.__version__'" % (parts[0],), warn_only=True)
+                    if res.failed:
+                        module_install_list.append(module_def)
+                    if parts[1] and res.split()[0] <> parts[1]:
+                        module_install_list.append(module_def)
+            if module_install_list:
+                upload_data2file('\n'.join(module_install_list), 'reqs.txt')
+                run('pip install -U -r reqs.txt')
+            # pythor is still not on Pypi ...
+            res = run("python -c 'import pythor'", warn_only=True)
+            if res.failed:
+                import pythor
+                put(pythor.__file__, '.')
         # upload classes, sequencer and connection parameters
         put('dbMapLoader.py', '.')
         put(FabContext.sequencer, '.')
@@ -96,7 +111,7 @@ def inject():
         # upload logger and cmd line parser
         put('files/__init__.py', 'files')
         put('files/simpleLogger.py', 'files')
-        put('files/pythor.py', 'files')
+        put('files/json_pp.py', 'files')
         # upload data file
         put(FabContext.data_file, 'files')
         # launch remote injection command
@@ -111,7 +126,7 @@ def inject():
                 os.makedirs(local)
             # only get the last one
             remote = res.split()[-1]
-            remote = os.path.normpath(remote)
+            remote = os.path.join('log', remote)
             get(remote, local)
         # download all new flat files
         download_new_files('flat_inj')
