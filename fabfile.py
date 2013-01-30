@@ -18,7 +18,7 @@ This script:
 
 from fabric.api import env, task
 from fabric.context_managers import cd, prefix
-from fabric.operations import put, get, run
+from fabric.operations import put, get, run, sudo
 from fabric.contrib import files
 from tempfile import NamedTemporaryFile
 import os.path
@@ -32,11 +32,6 @@ FabContext = mapDict(
     data_file = 'files/MA1.json',
     injection_options = '',
 )
-
-dependencies = """
-psycopg2==2.4.5
-sqlalchemy==0.7.9
-"""
 
 connection = {
     "connection_context" : {
@@ -96,6 +91,8 @@ def inject():
             run('mkdir files')
         # create remote virtualenv python installation with requirements (psycopg2, sqlalchemy)
         # and install them, if required only
+        with open('requirements.txt') as f:
+            dependencies = f.read()
         module_install_list = []
         with prefix('source bin/activate'):
             for module_def in dependencies.split():
@@ -131,3 +128,8 @@ def inject():
         download_last_modified('log')
         download_last_modified('flat_inj')
         download_last_modified('flat_seq')
+
+@task
+def restart():
+    sudo('service postgresql-8.4 restart')
+    run("psql -U postgres -c 'select * from user;'")
