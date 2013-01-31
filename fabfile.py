@@ -73,8 +73,7 @@ def download_last_modified(folder):
         remote = os.path.join(folder, res.strip())
         get(remote, local)
 
-@task
-def inject():
+def check_params():
     if not env.hosts:
         print "No target defined. Please use option '-H user@host'."
         return
@@ -82,13 +81,12 @@ def inject():
         print "No user specified in target. Please use option '-H user@host'."
         return
     print "will connect to", env.host_string
+
+def install_virtualenv():
     # check/create virtualenv '.dbLoader' in ~
     if not files.exists('%(working_dir)s/bin/activate' % FabContext):
         run('virtualenv %(working_dir)s' % FabContext)
     with cd(REMOTE_WORKING_DIRECTORY):
-        #  check/create 'files' subdirectory
-        if not files.exists('files'):
-            run('mkdir files')
         # create remote virtualenv python installation with requirements (psycopg2, sqlalchemy)
         # and install them, if required only
         with open('requirements.txt') as f:
@@ -106,28 +104,48 @@ def inject():
             if module_install_list:
                 upload_data2file('\n'.join(module_install_list), 'reqs.txt')
                 run('pip install -r reqs.txt')
+
+def install_engine():
+    with cd(REMOTE_WORKING_DIRECTORY):
         # pythor is still not on Pypi ...
         res = run("python -c 'import pythor'", warn_only=True)
         if res.failed:
             import pythor
             put(pythor.__file__, '.')
-        # upload classes, sequencer and connection parameters
+        #  check/create 'files' subdirectory
+        if not files.exists('files'):
+            run('mkdir files')
+        # upload proper engine
         put('dbMapLoader.py', '.')
-        put(FabContext.sequencer, '.')
-        upload_data2file(repr(connection), 'connection.json')
         # upload logger and cmd line parser
         put('files/__init__.py', 'files')
         put('files/simpleLogger.py', 'files')
         put('files/json_pp.py', 'files')
-        # upload data file
+
+def proper_inject():
+    with cd(REMOTE_WORKING_DIRECTORY):
+        # upload sequencer, data file and connection file
+        put(FabContext.sequencer, '.')
         put(FabContext.data_file, 'files')
+        upload_data2file(repr(connection), 'connection.json')
         # launch remote injection command
         with prefix('source bin/activate'):
             run('python %(sequencer)s %(data_file)s %(injection_options)s' % FabContext)
-        # download last modified result files (log, flat_inj and flat_seq)
+            # download last modified result files (log, flat_inj and flat_seq)
         download_last_modified('log')
         download_last_modified('flat_inj')
         download_last_modified('flat_seq')
+
+@task
+def inject():
+    check_params()
+    install_virtualenv()
+    install_engine()
+    proper_inject()
+
+@task
+def inject_only():
+    proper_inject()
 
 @task
 def restart():
