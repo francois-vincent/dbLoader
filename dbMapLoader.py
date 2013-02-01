@@ -295,6 +295,10 @@ class MapperSequencer(object):
         self.flat.append("flush")
         if self.dbengine:
             self.dbengine.flush()
+    def rollback(self):
+        self.flat.append("Roll Back")
+        if self.dbengine:
+            self.dbengine.rollback()
     def comment(self, message):
         self.flat.append("comment "+message)
     def abort(self, message):
@@ -468,4 +472,10 @@ class Injector(object):
             self.orm_session.flush()
         except Exception, e:
             self.log.error('INJECT ABORTED flush')
+            raise InjectorInterruption()
+    def rollback(self):
+        try:
+            self.orm_session.rollback()
+        except Exception, e:
+            self.log.error('INJECT ABORTED rollback')
             raise InjectorInterruption()
