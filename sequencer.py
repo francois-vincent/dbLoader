@@ -227,7 +227,7 @@ products = {
 
 #     Main Function
 # ----------------------
-def inject_from_master(records_json, database_connection, check_only=False, no_check=False, sequencer_only=False, _eval=False):
+def inject_from_master(records_json, database_connection, check_only, no_check, sequencer_only, _eval, abort_on_error):
     """
     This is the main function that creates datastructures from files, controls main classes instances and saves products
     record_json is a file containing a list of records.
@@ -271,7 +271,7 @@ def inject_from_master(records_json, database_connection, check_only=False, no_c
             dsn = connection['dsn'] % connection['connection_context']
             kwargs = dict(records_json=records_json, connection=connection)
             injector = Injector(dsn, kwargs, log)
-        mapseq = myMapperSequencer(log=log, imports=(('datetime', ('datetime',)),))
+        mapseq = myMapperSequencer(log=log, imports=(('datetime', ('datetime',)),), aoe=abort_on_error)
         if no_check or injector.check_mapping(mapseq.mapper):
             if not check_only:
                 if injector:
@@ -293,7 +293,7 @@ if __name__ == '__main__':
         This application will help you inject a set of compound records into any kind of relational database supported by SQLAlchemy.
         """
         options_aliases = cmdLineExtract.autoShort
-        def run(self, records_json, database='connection.json', check_only=bool(), no_check=bool(), sequencer_only=bool(), eval=bool()):
-            inject_from_master(records_json, database, check_only, no_check, sequencer_only, eval)
+        def run(self, records_json, database='connection.json', check_only=bool(), no_check=bool(), sequencer_only=bool(), eval=bool(), abort_on_error=False):
+            inject_from_master(records_json, database, check_only, no_check, sequencer_only, eval, abort_on_error)
 
     CommandLine().start()

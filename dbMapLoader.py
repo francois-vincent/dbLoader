@@ -33,6 +33,15 @@ class mapDict(dict):
     "This interface class allows to map attribute access API and call API to dict element access API"
     __call__ = __getattr__ = dict.__getitem__
 
+class Singleton(type):
+    def __init__(cls, *args, **kwargs):
+        super(Singleton, cls).__init__(*args, **kwargs)
+        cls.__instance = None
+    def __call__(cls, *args, **kwargs):
+        if cls.__instance is None:
+            cls.__instance = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls.__instance
+
 #        Decorators
 # ------------------------
 def _records(func):
@@ -41,7 +50,12 @@ def _records(func):
         try:
             func(self, records)
             r = True
-        except SequencerInterruption:
+        except SoftSequencerInterruption:
+            if self.dbengine:
+                self.dbengine.orm_session.rollback()
+            self.log.error("SEQUENCER ABORTED")
+            r = False
+        except HardSequencerInterruption:
             if self.dbengine:
                 self.dbengine.orm_session.rollback()
             self.log.error("SEQUENCER ABORTED")
@@ -57,12 +71,29 @@ def _records(func):
 def _record(func):
     def toto(self, record):
         self._start_record()
-        if hasattr(self, 'level'):
-            self.level += 1
-            r = func(self, mapDict(record))
-            self.level -= 1
-        else:
-            r = func(self, mapDict(record))
+        try:
+            if hasattr(self, 'level'):
+                self.level += 1
+                r = func(self, mapDict(record))
+                self.level -= 1
+            else:
+                r = func(self, mapDict(record))
+        except SoftSequencerInterruption:
+            if self.abort_on_error:
+                raise
+            else:
+                if self.dbengine:
+                    self.dbengine.orm_session.rollback()
+                self.log.error('SEQUENCER - RECORD SKIPPED')
+                r = False
+        except InjectorInterruption:
+            if self.abort_on_error:
+                raise
+            else:
+                if self.dbengine:
+                    self.dbengine.orm_session.rollback()
+                self.log.error('INJECTOR - RECORD SKIPPED')
+                r = False
         self._end_record()
         if hasattr(self, 'records_processed'):
             self.records_processed += 1
@@ -124,20 +155,26 @@ class translators:
 
 #        Main classes
 # -------------------------
-class SequencerInterruption(Exception):
+class SoftSequencerInterruption(Exception):
+    pass
+class HardSequencerInterruption(Exception):
     pass
 
 class MapperSequencer(object):
     """
     This is the class from which you will derive your mapper / sequencer
     """
+    __metaclass__ = Singleton
     # TODO reintroduce failed_list
     mapper = {}
-    def __init__(self, log=1, imports=tuple()):
+    def get_instance(self):
+        return self.instance
+    def __init__(self, log=1, imports=tuple(), abort_on_error=False):
         try:
             self.log = miniLogger(int(log))
         except:
             self.log = log
+        self.abort_on_error = abort_on_error
         self.dbengine = None
         self.session = None
         self.flat = []
@@ -207,7 +244,7 @@ class MapperSequencer(object):
         except Exception, e:
             self.log.error("  FAILED create table <%s>: %s" % (_create, e))
             self.flat.append("comment create failed <%s>" % _create)
-            raise SequencerInterruption()
+            raise HardSequencerInterruption()
         # save the evaluated record in the flat structure
         self.flat.append(("create "+_create, _filter))
         # if an engine is declared, inject the record into the database
@@ -230,7 +267,7 @@ class MapperSequencer(object):
             except Exception, e:
                 self.log.error("  FAILED select <%s>: %s" % (_check, e))
                 self.flat.append("comment select failed <%s>" % _check)
-                raise SequencerInterruption()
+                raise HardSequencerInterruption()
             _obj = self.dbengine.mapper_objects[_check]
             _query = self.orm_session.query(_obj).filter_by(**_filter)
             _count = _query.count()
@@ -242,7 +279,7 @@ class MapperSequencer(object):
             elif _count:
                 self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_check, _count, _filter))
                 self.flat.append("comment select failed <%s>" % _check)
-                raise SequencerInterruption()
+                raise HardSequencerInterruption()
         return 0
     def update(self, _check, _check_update, _update):
         """
@@ -257,13 +294,13 @@ class MapperSequencer(object):
                _update.split(':')[0] != _mapping_table:
                 self.log.error("  FAILED update <%s>: tables must have same prefixes" % (_check, ))
                 self.flat.append("comment update failed <%s>" % _check)
-                raise SequencerInterruption()
+                raise HardSequencerInterruption()
             try:
                 check_filter = self._eval_mapping(_check)
             except Exception, e:
                 self.log.error("  FAILED update <%s>: %s" % (_check, e))
                 self.flat.append("comment update failed <%s>" % _check)
-                raise SequencerInterruption()
+                raise HardSequencerInterruption()
             _obj = self.dbengine.mapper_objects[_check]
             _query = self.orm_session.query(_obj).filter_by(**check_filter)
             _count = _query.count()
@@ -273,19 +310,19 @@ class MapperSequencer(object):
                 except Exception, e:
                     self.log.error("  FAILED update <%s>: %s" % (_check_update, e))
                     self.flat.append("comment update failed <%s>" % _check_update)
-                    raise SequencerInterruption()
+                    raise HardSequencerInterruption()
                 try:
                     _update_filter = self._eval_mapping(_update)
                 except Exception, e:
                     self.log.error("  FAILED update <%s>: %s" % (_update, e))
                     self.flat.append("comment update failed <%s>" % _update)
-                    raise SequencerInterruption()
+                    raise HardSequencerInterruption()
                 self.flat.append(("update "+_check, check_filter))
                 return 1+int(self.dbengine.update(_mapping_table, _check_update_filter, _update_filter, _query.one()))
             elif _count:
                 self.log.error("  FAILED update <%s>, %d records found, query: %s" % (_check, _count, check_filter))
                 self.flat.append("comment update failed <%s>" % _check)
-                raise SequencerInterruption()
+                raise HardSequencerInterruption()
         return 0
     def commit(self):
         self.flat.append("commit")
@@ -301,10 +338,14 @@ class MapperSequencer(object):
             self.dbengine.rollback()
     def comment(self, message):
         self.flat.append("comment "+message)
-    def abort(self, message):
-        self.log.error("ABORT: "+message)
-        self.flat.append("comment ABORT: "+message)
-        raise SequencerInterruption()
+    def softAbort(self, message):
+        self.log.error("SOFT ABORT: "+message)
+        self.flat.append("comment SOFT ABORT: "+message)
+        raise SoftSequencerInterruption()
+    def hadrAbort(self, message):
+        self.log.error("HARD ABORT: "+message)
+        self.flat.append("comment HARD ABORT: "+message)
+        raise HardSequencerInterruption()
     def cancel_last(self):
         if self.flat:
             self.flat.pop()
@@ -322,6 +363,9 @@ class InjectorInterruption(Exception):
     pass
 
 class Injector(object):
+    __metaclass__ = Singleton
+    def get_instance(self):
+        return self.instance
     def __init__(self, connection_dsn, kwargs, log=0):
         """
         The constructor establishes the connection to the database and collects some
