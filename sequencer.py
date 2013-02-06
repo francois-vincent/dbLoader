@@ -21,12 +21,12 @@ from files.json_pp import json_dump, json_load
 # so one may be tempted not to use the conversion function above.
 # if you do so, the update method will fail to consider dates as equal (because a
 # string is never equal to a date) and undue updates will silently take place !
-def convert_date(value):
+def convert_datetime(value):
     _date, _time = value.split('T')
     args = list(_date.split('-'))
     args.extend(_time.split(':'))
     return datetime(*[int(x) for x in args])
-translators.set_static(convert_date)
+translators.set_static(convert_datetime)
 
 class myMapperSequencer(MapperSequencer):
     mapper = {
@@ -276,7 +276,7 @@ def inject_from_master(records_json, database_connection, check_only, no_check, 
             if not check_only:
                 if injector:
                     injector.prepare_session(myMapperSequencer.mapper).prepare_injection()
-                Shell(mapseq, injector)
+                    Shell(mapseq, injector)
                 result = mapseq.multi_process_records(records)
                 json_dump(mapseq.flat, flat_seq)
                 if not sequencer_only:

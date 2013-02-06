@@ -8,9 +8,9 @@ __github__ = 'https://github.com/francois-vincent'
 
 from inspect import stack, getargvalues, getargspec
 import new, re, sys
-from datetime import time
+from datetime import time, date, datetime
 from sqlalchemy.engine import create_engine, reflection
-from sqlalchemy import MetaData, Table, orm
+from sqlalchemy import MetaData, Table, orm, types
 
 #     Utility Classes
 # ------------------------
@@ -126,10 +126,21 @@ class translators:
     Translators are functions that can be called from the sequencer via the mapping.
     Purpose is to convert data from imported records
     """
+    timestamp_separator = 'T'
     @ staticmethod
     def set_static(att):
         "allows to add a static method to translators"
         setattr(translators, att.__name__, staticmethod(att))
+    @ staticmethod
+    def convert_date(value):
+        _date = value.split('-')
+        return date(*[int(x) for x in _date])
+    @ staticmethod
+    def convert_timestamp(value):
+        _date, _time = value.split(translators.timestamp_separator)
+        args = list(_date.split('-'))
+        args.extend(_time.split(':'))
+        return datetime(*[int(x) for x in args])
     @ staticmethod
     def convert_duration(value):
         """converts an integer or a string like 'xx h yy min' to time,
@@ -167,8 +178,9 @@ class MapperSequencer(object):
     __metaclass__ = Singleton
     # TODO reintroduce failed_list
     mapper = {}
-    def get_instance(self):
-        return self.instance
+    @classmethod
+    def get_instance(cls):
+        return cls.__instance
     def __init__(self, log=1, imports=tuple(), abort_on_error=False):
         try:
             self.log = miniLogger(int(log))
@@ -362,10 +374,17 @@ class Shell(object):
 class InjectorInterruption(Exception):
     pass
 
+converters4types = {
+    'DATE' : 'translators.convert_date(%s)',
+    'TIMESTAMP' : 'translators.convert_timestamp(%s)',
+    'DATETIME' : 'translators.convert_timestamp(%s)',
+}
+
 class Injector(object):
     __metaclass__ = Singleton
-    def get_instance(self):
-        return self.instance
+    @classmethod
+    def get_instance(cls):
+        return cls.__instance
     def __init__(self, connection_dsn, kwargs, log=0):
         """
         The constructor establishes the connection to the database and collects some
@@ -389,7 +408,7 @@ class Injector(object):
         self.engine = engine
         self.inspector = insp
         # check presence of required schema in database and store it
-        schema = kwargs['connection']['schema']
+        schema = kwargs['connection'].get('schema', None)
         if schema and schema not in insp.get_schema_names():
             raise RuntimeError("Required schema %s not found"%schema)
         self.schema = schema
@@ -400,6 +419,7 @@ class Injector(object):
         self.table_key = mapDict(zip(self.tablenames, xrange(len(self.tablenames))))
         # store metadata
         self.meta = MetaData(engine, schema=schema)
+        self.columnsConverters = {}
         self.log.info('Connected to base <%s>, schema <%s>'%(connection_dsn, schema))
     def check_mapping(self, mapper):
         """
@@ -432,6 +452,14 @@ class Injector(object):
         return self.tablenames
     def get_columnames(self, table):
         return [c['name'] for c in self.inspector.get_columns(table, schema=self.schema)]
+    def get_columnsConverters(self, mapper):
+        if not self.columnsConverters:
+            for _t in mapper:
+                _t = _t.split(':')[0]
+                if _t in self.columnsConverters: continue
+                self.columnsConverters[_t] = dict((_c['name'], converters4types[str(_c['type']).split()[0]]) \
+                    for _c in self.inspector.get_columns(_t, schema=self.schema) if str(_c['type']).split()[0] in converters4types)
+        return self.columnsConverters
     def prepare_session(self, mapper):
         self.log.info("INJECT SESSION PREPARE")
         self.mapper_objects = dict([(_t, new.classobj(_t.split(':')[0], (object,), {})) for _t in mapper])
