@@ -128,9 +128,9 @@ class translators:
     """
     timestamp_separator = 'T'
     @ staticmethod
-    def set_static(att):
+    def set_static(method):
         "allows to add a static method to translators"
-        setattr(translators, att.__name__, staticmethod(att))
+        setattr(translators, method.__name__, staticmethod(method))
     @ staticmethod
     def convert_date(value):
         _date = value.split('-')
@@ -263,6 +263,32 @@ class MapperSequencer(object):
         if self.dbengine:
             _prefix = _create.split(':')[0]
             self.dbengine.create(_prefix, _filter)
+    def delete(self, _del, _allow_multiple=False):
+        """
+        _del: a mapping record to inject into the database
+        """
+        # eval the mapping
+        try:
+            _filter = self._eval_mapping(_del)
+        except Exception, e:
+            self.log.error("  FAILED delete table <%s>: %s" % (_del, e))
+            self.flat.append("comment delete failed <%s>" % _del)
+            raise HardSequencerInterruption()
+        if self.dbengine:
+            _obj = self.dbengine.mapper_objects[_del]
+            _query = self.orm_session.query(_obj).filter_by(**_filter)
+            _count = _query.count()
+            if _count and (_allow_multiple or _count==1):
+                self.flat.append(("delete "+_del, _filter))
+                self.flat.append("comment <%s> deleted" % _count)
+                for _instance in _query:
+                    self.dbengine.delete(_del, _instance)
+            elif _count:
+                self.log.error("  FAILED delete <%s>, %d records found, query: %s" % (_del, _count, _filter))
+                self.flat.append("comment delete failed <%s>" % _del)
+                raise SoftSequencerInterruption()
+        self.flat.append(("delete "+_del, _filter))
+        return 0
     def exists(self, _check):
         return self.select(_check, _check_only=True)
     def select(self, _check, _check_only=False):
@@ -272,14 +298,13 @@ class MapperSequencer(object):
         _check_only: if set, this method will allow multiple matching records and will not update session
         returns: # record(s) found
         """
+        try:
+            _filter = self._eval_mapping(_check)
+        except Exception, e:
+            self.log.error("  FAILED select <%s>: %s" % (_check, e))
+            self.flat.append("comment select failed <%s>" % _check)
+            raise HardSequencerInterruption()
         if self.dbengine:
-#            _prefix = _check.split(':')[0]
-            try:
-                _filter = self._eval_mapping(_check)
-            except Exception, e:
-                self.log.error("  FAILED select <%s>: %s" % (_check, e))
-                self.flat.append("comment select failed <%s>" % _check)
-                raise HardSequencerInterruption()
             _obj = self.dbengine.mapper_objects[_check]
             _query = self.orm_session.query(_obj).filter_by(**_filter)
             _count = _query.count()
@@ -291,7 +316,8 @@ class MapperSequencer(object):
             elif _count:
                 self.log.error("  FAILED select <%s>, %d records found, query: %s" % (_check, _count, _filter))
                 self.flat.append("comment select failed <%s>" % _check)
-                raise HardSequencerInterruption()
+                raise SoftSequencerInterruption()
+        self.flat.append(("select "+_check, _filter))
         return 0
     def update(self, _check, _check_update, _update):
         """
@@ -300,19 +326,19 @@ class MapperSequencer(object):
         _update: a mapping record to update the database record
         returns: 0 (no record found), 1 (record found / not updated), 2 (record found / updated)
         """
+        _mapping_table = _check.split(':')[0]
+        if (isinstance(_check_update, basestring) and _check_update.split(':')[0] != _mapping_table) or \
+           _update.split(':')[0] != _mapping_table:
+            self.log.error("  FAILED update <%s>: tables must have same prefixes" % (_check, ))
+            self.flat.append("comment update failed <%s>" % _check)
+            raise HardSequencerInterruption()
+        try:
+            check_filter = self._eval_mapping(_check)
+        except Exception, e:
+            self.log.error("  FAILED update <%s>: %s" % (_check, e))
+            self.flat.append("comment update failed <%s>" % _check)
+            raise HardSequencerInterruption()
         if self.dbengine:
-            _mapping_table = _check.split(':')[0]
-            if (isinstance(_check_update, basestring) and _check_update.split(':')[0] != _mapping_table) or \
-               _update.split(':')[0] != _mapping_table:
-                self.log.error("  FAILED update <%s>: tables must have same prefixes" % (_check, ))
-                self.flat.append("comment update failed <%s>" % _check)
-                raise HardSequencerInterruption()
-            try:
-                check_filter = self._eval_mapping(_check)
-            except Exception, e:
-                self.log.error("  FAILED update <%s>: %s" % (_check, e))
-                self.flat.append("comment update failed <%s>" % _check)
-                raise HardSequencerInterruption()
             _obj = self.dbengine.mapper_objects[_check]
             _query = self.orm_session.query(_obj).filter_by(**check_filter)
             _count = _query.count()
@@ -334,7 +360,8 @@ class MapperSequencer(object):
             elif _count:
                 self.log.error("  FAILED update <%s>, %d records found, query: %s" % (_check, _count, check_filter))
                 self.flat.append("comment update failed <%s>" % _check)
-                raise HardSequencerInterruption()
+                raise SoftSequencerInterruption()
+        self.flat.append(("update "+_check, check_filter))
         return 0
     def commit(self):
         self.flat.append("commit")
@@ -354,7 +381,7 @@ class MapperSequencer(object):
         self.log.error("SOFT ABORT: "+message)
         self.flat.append("comment SOFT ABORT: "+message)
         raise SoftSequencerInterruption()
-    def hadrAbort(self, message):
+    def hardAbort(self, message):
         self.log.error("HARD ABORT: "+message)
         self.flat.append("comment HARD ABORT: "+message)
         raise HardSequencerInterruption()
@@ -532,6 +559,11 @@ class Injector(object):
         except Exception, e:
             self.log.error('INJECT ABORTED update <%s> exception: %s' % (_table, e))
             raise InjectorInterruption()
+    def delete(self, _table, _object):
+        if _table in self.session:
+            del self.session[_table]
+        self.orm_session.delete(_object)
+        self.to_flush.append(('delete ', _table, _object))
     def commit(self):
         try:
             self.orm_session.commit()
