@@ -265,7 +265,7 @@ class MapperSequencer(object):
             self.dbengine.create(_prefix, _filter)
     def delete(self, _del, _allow_multiple=False):
         """
-        _del: a mapping record to inject into the database
+        _del: a mapping record to delete from the database
         """
         # eval the mapping
         try:

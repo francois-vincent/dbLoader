@@ -15,7 +15,8 @@ def json_load(filename, mode='eval'):
     """
     with open(filename, 'r') as f:
         if mode == 'json':
-            import json
+            try: import simplejson as json
+            except ImportError: import json
             return json.load(f)
         if mode == 'eval':
             return eval(f.read())
@@ -29,7 +30,8 @@ def json_dump(data, filename, mode='eval'):
     """
     with open(filename, 'w') as f:
         if mode == 'json':
-            import json
+            try: import simplejson as json
+            except ImportError: import json
             json.dump(data, f, indent=2)
         elif mode == 'eval':
             from pprint import pformat
